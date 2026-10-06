@@ -18,10 +18,10 @@ class _CacheEntry {
 }
 
 class ApiService {
-  static String baseUrl = 'http://192.168.0.3:8000';
+  static String baseUrl = 'https://forexai.up.railway.app';
 
   static final List<String> candidateUrls = [
-    'http://192.168.120.88:8000',
+    'https://forexai.up.railway.app',
     'http://192.168.0.3:8000',
     'http://127.0.0.1:8000',
     'http://localhost:8000',
@@ -264,7 +264,8 @@ class ApiService {
     double? sensitivity,
     int atrPeriod = 10,
   }) async {
-    var url = '/api/v1/analysis/ut-bot/$symbol?timeframe=$timeframe&atr_period=$atrPeriod';
+    var url =
+        '/api/v1/analysis/ut-bot/$symbol?timeframe=$timeframe&atr_period=$atrPeriod';
     if (sensitivity != null) {
       url += '&sensitivity=$sensitivity';
     }
