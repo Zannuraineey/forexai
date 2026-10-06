@@ -68,6 +68,15 @@ class IngestionWorker:
         self.symbols = symbols
         return symbols
 
+    async def add_symbol(self, symbol: str) -> None:
+        """Dynamically registers and subscribes a newly activated instrument."""
+        sym = symbol.upper()
+        if sym not in self.symbols:
+            self.symbols.append(sym)
+            logger.info(f"Ingestion worker adding dynamic symbol: {sym}")
+            if hasattr(self.provider, "subscribe_symbol"):
+                await self.provider.subscribe_symbol(sym, self.timeframes)
+
     async def run_startup_recovery(self) -> None:
         """Run initial gap recovery before listening for live ticks."""
         self._is_recovering_gaps = True

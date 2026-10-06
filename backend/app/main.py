@@ -11,6 +11,9 @@ from app.services.ai import get_session_scanner
 
 ingestion_worker: IngestionWorker | None = None
 
+def get_ingestion_worker() -> IngestionWorker | None:
+    return ingestion_worker
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup

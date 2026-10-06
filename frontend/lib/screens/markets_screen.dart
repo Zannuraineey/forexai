@@ -386,11 +386,13 @@ class _CatalogBottomSheetState extends State<_CatalogBottomSheet> {
 
   final List<Map<String, String>> _categories = [
     {'id': 'all', 'label': 'All'},
+    {'id': 'volatility', 'label': 'Volatility (15)'},
     {'id': 'crash_boom', 'label': 'Crash & Boom (14)'},
+    {'id': 'jump_step', 'label': 'Jump & Step (6)'},
+    {'id': 'dex', 'label': 'DEX Indices (6)'},
     {'id': 'baskets', 'label': 'Baskets (5)'},
     {'id': 'range_break', 'label': 'Range Break'},
     {'id': 'daily_reset', 'label': 'Daily Indices'},
-    {'id': 'volatility', 'label': 'Volatility'},
     {'id': 'indices', 'label': 'Stock Indices (12)'},
     {'id': 'metals', 'label': 'Metals'},
     {'id': 'major_pairs', 'label': 'Forex Majors'},

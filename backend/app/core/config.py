@@ -34,7 +34,11 @@ class Settings(BaseSettings):
         "USDCHF",
         "USDCAD",
         "BTCUSD",
+        "R_10",
+        "R_25",
+        "R_50",
         "R_75",
+        "R_100",
         "BOOM1000",
         "CRASH1000",
     ]

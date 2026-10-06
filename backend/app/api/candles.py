@@ -45,8 +45,13 @@ async def get_watchlist_summary(
         candles = await svc.get_candles(symbol=inst.symbol, timeframe="1m", limit=2, auto_fetch=False)
         if not candles:
             candles = await svc.get_candles(symbol=inst.symbol, timeframe="15m", limit=2, auto_fetch=False)
+        # If still no candles (e.g. freshly activated instrument), fetch on-demand to seed DB
         if not candles:
-            candles = await svc.get_candles(symbol=inst.symbol, timeframe="1h", limit=2, auto_fetch=False)
+            try:
+                candles = await svc.get_candles(symbol=inst.symbol, timeframe="1m", limit=2, auto_fetch=True)
+            except Exception:
+                pass
+
         price = None
         change_pct = 0.0
 
@@ -57,7 +62,7 @@ async def get_watchlist_summary(
             if prev.open > 0:
                 change_pct = round(((latest.close - prev.open) / prev.open) * 100, 2)
 
-        is_synthetic = any(k in inst.symbol for k in ["BOOM", "CRASH", "R_", "1HZ", "RB", "WLD"])
+        is_synthetic = any(k in inst.symbol.upper() for k in ["BOOM", "CRASH", "R_", "1HZ", "RB", "WLD", "JD", "STP", "DEX"])
         market_status = "Open" if (is_synthetic or not is_weekend) else "Closed"
 
         summary.append({

@@ -84,6 +84,20 @@ async def toggle_instrument(
         inst.is_active = not inst.is_active
         await db.commit()
         await db.refresh(inst)
+
+        if inst.is_active:
+            from app.main import get_ingestion_worker
+            from app.services.candle_service import CandleService
+            worker = get_ingestion_worker()
+            if worker:
+                await worker.add_symbol(inst.symbol)
+            try:
+                svc = CandleService(db)
+                await svc.get_candles(symbol=inst.symbol, timeframe="1m", limit=5, auto_fetch=True)
+                await svc.get_candles(symbol=inst.symbol, timeframe="15m", limit=5, auto_fetch=True)
+            except Exception:
+                pass
+
         return {
             "symbol": inst.symbol,
             "is_active": inst.is_active,
@@ -108,6 +122,18 @@ async def toggle_instrument(
     db.add(inst)
     await db.commit()
     await db.refresh(inst)
+
+    from app.main import get_ingestion_worker
+    from app.services.candle_service import CandleService
+    worker = get_ingestion_worker()
+    if worker:
+        await worker.add_symbol(inst.symbol)
+    try:
+        svc = CandleService(db)
+        await svc.get_candles(symbol=inst.symbol, timeframe="1m", limit=5, auto_fetch=True)
+        await svc.get_candles(symbol=inst.symbol, timeframe="15m", limit=5, auto_fetch=True)
+    except Exception:
+        pass
 
     return {
         "symbol": inst.symbol,

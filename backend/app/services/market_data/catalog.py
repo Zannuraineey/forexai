@@ -179,12 +179,42 @@ DERIV_CATALOG: List[Dict[str, Any]] = [
     {"symbol": "RDBULL", "deriv_symbol": "RDBULL", "display_name": "Bull Market Index", "market": "synthetic_index", "submarket": "daily_reset", "base_asset": "BULL", "quote_asset": "USD", "pip_size": 0.0001, "default_active": False},
     {"symbol": "RDBEAR", "deriv_symbol": "RDBEAR", "display_name": "Bear Market Index", "market": "synthetic_index", "submarket": "daily_reset", "base_asset": "BEAR", "quote_asset": "USD", "pip_size": 0.0001, "default_active": False},
 
-    # --- VOLATILITY (RANDOM) INDICES ---
+    # --- VOLATILITY (RANDOM) INDICES (2-second ticks) ---
     {"symbol": "R_10", "deriv_symbol": "R_10", "display_name": "Volatility 10 Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL", "quote_asset": "USD", "pip_size": 0.001, "default_active": False},
     {"symbol": "R_25", "deriv_symbol": "R_25", "display_name": "Volatility 25 Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL", "quote_asset": "USD", "pip_size": 0.001, "default_active": False},
     {"symbol": "R_50", "deriv_symbol": "R_50", "display_name": "Volatility 50 Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL", "quote_asset": "USD", "pip_size": 0.0001, "default_active": False},
     {"symbol": "R_75", "deriv_symbol": "R_75", "display_name": "Volatility 75 Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL", "quote_asset": "USD", "pip_size": 0.0001, "default_active": False},
     {"symbol": "R_100", "deriv_symbol": "R_100", "display_name": "Volatility 100 Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+
+    # --- VOLATILITY (1-SECOND) INDICES (1s ticks) ---
+    {"symbol": "1HZ10V", "deriv_symbol": "1HZ10V", "display_name": "Volatility 10 (1s) Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL1S", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "1HZ15V", "deriv_symbol": "1HZ15V", "display_name": "Volatility 15 (1s) Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL1S", "quote_asset": "USD", "pip_size": 0.001, "default_active": False},
+    {"symbol": "1HZ25V", "deriv_symbol": "1HZ25V", "display_name": "Volatility 25 (1s) Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL1S", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "1HZ30V", "deriv_symbol": "1HZ30V", "display_name": "Volatility 30 (1s) Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL1S", "quote_asset": "USD", "pip_size": 0.001, "default_active": False},
+    {"symbol": "1HZ50V", "deriv_symbol": "1HZ50V", "display_name": "Volatility 50 (1s) Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL1S", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "1HZ75V", "deriv_symbol": "1HZ75V", "display_name": "Volatility 75 (1s) Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL1S", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "1HZ90V", "deriv_symbol": "1HZ90V", "display_name": "Volatility 90 (1s) Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL1S", "quote_asset": "USD", "pip_size": 0.001, "default_active": False},
+    {"symbol": "1HZ100V", "deriv_symbol": "1HZ100V", "display_name": "Volatility 100 (1s) Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL1S", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "1HZ150V", "deriv_symbol": "1HZ150V", "display_name": "Volatility 150 (1s) Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL1S", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "1HZ250V", "deriv_symbol": "1HZ250V", "display_name": "Volatility 250 (1s) Index", "market": "synthetic_index", "submarket": "volatility", "base_asset": "VOL1S", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+
+    # --- JUMP INDICES ---
+    {"symbol": "JD10", "deriv_symbol": "JD10", "display_name": "Jump 10 Index", "market": "synthetic_index", "submarket": "jump_step", "base_asset": "JUMP", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "JD25", "deriv_symbol": "JD25", "display_name": "Jump 25 Index", "market": "synthetic_index", "submarket": "jump_step", "base_asset": "JUMP", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "JD50", "deriv_symbol": "JD50", "display_name": "Jump 50 Index", "market": "synthetic_index", "submarket": "jump_step", "base_asset": "JUMP", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "JD75", "deriv_symbol": "JD75", "display_name": "Jump 75 Index", "market": "synthetic_index", "submarket": "jump_step", "base_asset": "JUMP", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "JD100", "deriv_symbol": "JD100", "display_name": "Jump 100 Index", "market": "synthetic_index", "submarket": "jump_step", "base_asset": "JUMP", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+
+    # --- STEP INDICES ---
+    {"symbol": "stpRNG", "deriv_symbol": "stpRNG", "display_name": "Step Index", "market": "synthetic_index", "submarket": "jump_step", "base_asset": "STEP", "quote_asset": "USD", "pip_size": 0.1, "default_active": False},
+
+    # --- DEX INDICES ---
+    {"symbol": "DEX600UP", "deriv_symbol": "DEX600UP", "display_name": "DEX 600 UP Index", "market": "synthetic_index", "submarket": "dex", "base_asset": "DEX", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "DEX600DN", "deriv_symbol": "DEX600DN", "display_name": "DEX 600 DOWN Index", "market": "synthetic_index", "submarket": "dex", "base_asset": "DEX", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "DEX900UP", "deriv_symbol": "DEX900UP", "display_name": "DEX 900 UP Index", "market": "synthetic_index", "submarket": "dex", "base_asset": "DEX", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "DEX900DN", "deriv_symbol": "DEX900DN", "display_name": "DEX 900 DOWN Index", "market": "synthetic_index", "submarket": "dex", "base_asset": "DEX", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "DEX1500UP", "deriv_symbol": "DEX1500UP", "display_name": "DEX 1500 UP Index", "market": "synthetic_index", "submarket": "dex", "base_asset": "DEX", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
+    {"symbol": "DEX1500DN", "deriv_symbol": "DEX1500DN", "display_name": "DEX 1500 DOWN Index", "market": "synthetic_index", "submarket": "dex", "base_asset": "DEX", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},
 
     # --- AMERICAS OTC INDICES ---
     {"symbol": "OTC_SPC", "deriv_symbol": "OTC_SPC", "display_name": "US 500 (S&P 500)", "market": "indices", "submarket": "americas_otc", "base_asset": "SPC", "quote_asset": "USD", "pip_size": 0.01, "default_active": False},

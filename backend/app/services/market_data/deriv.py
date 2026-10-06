@@ -283,3 +283,27 @@ class DerivMarketDataProvider(IMarketDataProvider):
                 yield candle
             except asyncio.TimeoutError:
                 continue
+
+    async def subscribe_symbol(self, symbol: str, timeframes: List[str]) -> None:
+        """Dynamically subscribes a new instrument into the live websocket stream."""
+        if not self.is_connected or not self._ws:
+            return
+        deriv_symbol = self.map_symbol(symbol)
+        for tf in timeframes:
+            granularity = DERIV_TIMEFRAME_MAP.get(tf, 60)
+            req_id = self._next_req_id()
+            sub_payload = {
+                "ticks_history": deriv_symbol,
+                "end": "latest",
+                "style": "candles",
+                "granularity": granularity,
+                "count": 1,
+                "subscribe": 1,
+                "req_id": req_id,
+            }
+            try:
+                await self._ws.send(json.dumps(sub_payload))
+                logger.info(f"Dynamically subscribed to live Deriv feed: {symbol} ({tf})")
+            except Exception as e:
+                logger.warning(f"Failed dynamic Deriv subscription for {symbol} ({tf}): {e}")
+
