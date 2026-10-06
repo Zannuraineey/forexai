@@ -16,7 +16,7 @@ def get_engine_url() -> str:
     if settings.ENVIRONMENT == "test":
         return settings.TEST_DATABASE_URL
 
-    raw_url = str(settings.DATABASE_URL or "").strip()
+    raw_url = str(settings.DATABASE_URL or "").strip().strip("'\"").strip()
     if not raw_url or raw_url.startswith("${"):
         logger.warning(
             f"DATABASE_URL is not set or contains an unresolved placeholder ({raw_url!r}). "
