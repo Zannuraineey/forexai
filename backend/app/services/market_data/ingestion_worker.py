@@ -50,14 +50,33 @@ class IngestionWorker:
             "monitored_timeframes": self.timeframes,
         }
 
+    async def resolve_active_symbols(self) -> List[str]:
+        """Resolves active symbols from database and settings."""
+        symbols = list(self.symbols or [])
+        try:
+            from app.models.instrument import Instrument
+            from sqlalchemy import select
+            async with async_session_factory() as session:
+                stmt = select(Instrument.symbol).where(Instrument.is_active == True)
+                res = await session.execute(stmt)
+                db_symbols = [s.upper() for s in res.scalars().all()]
+                for s in db_symbols:
+                    if s not in symbols:
+                        symbols.append(s)
+        except Exception as e:
+            logger.warning(f"Could not fetch active instruments from DB for ingestion worker: {e}")
+        self.symbols = symbols
+        return symbols
+
     async def run_startup_recovery(self) -> None:
         """Run initial gap recovery before listening for live ticks."""
         self._is_recovering_gaps = True
         logger.info("Initiating startup gap recovery check across all instruments...")
         try:
+            active_symbols = await self.resolve_active_symbols()
             async with async_session_factory() as session:
                 engine = GapRecoveryEngine(session, self.provider)
-                reports = await engine.recover_all(self.symbols, self.timeframes)
+                reports = await engine.recover_all(active_symbols, self.timeframes)
                 total_recovered = sum(r.recovered_bars for r in reports)
                 logger.info(f"Startup gap recovery complete. Total recovered bars: {total_recovered}")
         except Exception as e:

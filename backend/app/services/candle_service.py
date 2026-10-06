@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -159,6 +159,36 @@ class CandleService:
         stmt = stmt.order_by(Candle.timestamp_utc.desc()).limit(limit)
         result = await self.db.execute(stmt)
         candles = list(result.scalars().all())
-        candles.reverse() # Return chronological ascending
 
+        # If database has insufficient candle history, auto-fetch on-demand from provider
+        if len(candles) < 15 and not start_utc:
+            try:
+                from app.services.market_data import get_market_data_provider
+                provider = get_market_data_provider("deriv")
+                now = datetime.now(timezone.utc)
+                start = now - timedelta(days=7)
+                fetch_count = max(limit, 100)
+                fetched = await provider.fetch_historical_candles(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_time=start,
+                    end_time=now,
+                    count=fetch_count,
+                )
+                if fetched:
+                    await self.save_candles(fetched)
+                    # Re-query saved candles
+                    stmt_retry = (
+                        select(Candle)
+                        .where(Candle.instrument_id == inst.id)
+                        .where(Candle.timeframe == timeframe)
+                        .order_by(Candle.timestamp_utc.desc())
+                        .limit(limit)
+                    )
+                    res_retry = await self.db.execute(stmt_retry)
+                    candles = list(res_retry.scalars().all())
+            except Exception as e:
+                logger.warning(f"On-demand candle fetch failed for {symbol} ({timeframe}): {e}")
+
+        candles.reverse() # Return chronological ascending
         return [CandleRead.model_validate(c) for c in candles]

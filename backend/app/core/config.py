@@ -32,7 +32,11 @@ class Settings(BaseSettings):
         "USDJPY",
         "AUDUSD",
         "USDCHF",
-        "USDCAD"
+        "USDCAD",
+        "BTCUSD",
+        "R_75",
+        "BOOM1000",
+        "CRASH1000",
     ]
 
     # Target Timeframes (1m, 5m, 15m, 1h, 4h, 1d)

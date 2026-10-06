@@ -34,9 +34,15 @@ class _InstrumentScreenState extends State<InstrumentScreen> {
   String? _errorMessage;
   Timer? _refreshTimer;
 
+  bool get _isSyntheticIndex {
+    final s = widget.symbol.toUpperCase();
+    return s.startsWith('R_') || s.startsWith('BOOM') || s.startsWith('CRASH') || s.startsWith('1HZ') || s.contains('VOLATILITY');
+  }
+
   @override
   void initState() {
     super.initState();
+    _useDerivChart = !_isSyntheticIndex;
     _loadAll();
     _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (mounted) {
