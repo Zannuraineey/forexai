@@ -158,9 +158,9 @@ class _NewsScreenState extends State<NewsScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppTheme.invalidated.withOpacity(0.1),
+        color: AppTheme.invalidated.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.invalidated.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.invalidated.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -202,9 +202,9 @@ class _NewsScreenState extends State<NewsScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppTheme.accent.withOpacity(0.12),
+                      color: AppTheme.accent.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppTheme.accent.withOpacity(0.3)),
+                      border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
                     ),
                     child: const Row(
                       children: [
@@ -225,7 +225,7 @@ class _NewsScreenState extends State<NewsScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: trendColor.withOpacity(0.12),
+                      color: trendColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -247,7 +247,7 @@ class _NewsScreenState extends State<NewsScreen> {
                   border: Border.all(color: AppTheme.border),
                 ),
                 child: Text(
-                  'REGIME: ${dxy.market_regime}',
+                  'REGIME: ${dxy.marketRegime}',
                   style: const TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
@@ -350,7 +350,7 @@ class _NewsScreenState extends State<NewsScreen> {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: _events.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            separatorBuilder: (_, _) => const SizedBox(width: 10),
             itemBuilder: (ctx, i) {
               final ev = _events[i];
               final isSelected = ev.id == _selectedEventId;
@@ -370,7 +370,7 @@ class _NewsScreenState extends State<NewsScreen> {
         width: 220,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.accent.withOpacity(0.08) : AppTheme.surface,
+          color: isSelected ? AppTheme.accent.withValues(alpha: 0.08) : AppTheme.surface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSelected ? AppTheme.accent : AppTheme.border,
@@ -388,8 +388,8 @@ class _NewsScreenState extends State<NewsScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: ev.impact == 'HIGH'
-                        ? AppTheme.downRed.withOpacity(0.15)
-                        : AppTheme.accent.withOpacity(0.15),
+                        ? AppTheme.downRed.withValues(alpha: 0.15)
+                        : AppTheme.accent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -511,9 +511,9 @@ class _NewsScreenState extends State<NewsScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.accent.withOpacity(0.08),
+              color: AppTheme.accent.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.accent.withOpacity(0.25)),
+              border: Border.all(color: AppTheme.accent.withValues(alpha: 0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -690,7 +690,7 @@ class _NewsScreenState extends State<NewsScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: biasColor.withOpacity(0.12),
+                            color: biasColor.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(

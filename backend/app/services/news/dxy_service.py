@@ -84,7 +84,14 @@ class DXYService:
         dxy_closes = []
         for c_val in closes:
             try:
-                dxy_closes.append(50.14348112 * math.pow(c_val, -0.576) * math.pow(jpy, 0.136) * math.pow(gbp, -0.119))
+                dxy_closes.append(
+                    50.14348112
+                    * math.pow(c_val, -0.576)
+                    * math.pow(jpy, 0.136)
+                    * math.pow(gbp, -0.119)
+                    * math.pow(cad, 0.091)
+                    * math.pow(chf, 0.036)
+                )
             except Exception:
                 dxy_closes.append(dxy_val)
 

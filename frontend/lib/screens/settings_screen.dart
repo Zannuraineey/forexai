@@ -35,7 +35,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Device push registration state (kept completely silent and secure from end-user)
   bool _isDeviceRegistered = false;
   bool _isSendingTestPush = false;
-  String? _cachedFcmToken;
 
   @override
   void initState() {
@@ -59,7 +58,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       final token = await messaging.getToken();
       if (token != null && mounted) {
-        _cachedFcmToken = token;
         await ApiService.registerDevice(
           fcmToken: token,
           platform: 'android',
@@ -511,7 +509,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               Switch(
                 value: _multiTimeframeConfirmation,
-                activeColor: AppTheme.accent,
+                activeThumbColor: AppTheme.accent,
                 onChanged: (v) => setState(() => _multiTimeframeConfirmation = v),
               ),
             ],
@@ -641,7 +639,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     value: m,
                     child: Text('$m mins', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
                   );
-                }).toList>,
+                }).toList(),
                 onChanged: (val) {
                   if (val != null) setState(() => _cooldownMinutes = val);
                 },
@@ -686,7 +684,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         Switch(
           value: val,
-          activeColor: AppTheme.accent,
+          activeThumbColor: AppTheme.accent,
           onChanged: onChanged,
         ),
       ],
