@@ -12,9 +12,11 @@ from app.schemas.news import (
     AIQueryRequest,
     AIQueryResponse,
 )
-from app.services.news.dxy_service import DXYService
-from app.services.news.economic_calendar_service import EconomicCalendarService
-from app.services.news.news_intelligence_engine import NewsIntelligenceEngine
+from app.services.news import (
+    DXYService,
+    EconomicCalendarService,
+    NewsIntelligenceEngine,
+)
 
 router = APIRouter(prefix="/news", tags=["News Intelligence & DXY"])
 

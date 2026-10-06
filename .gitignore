@@ -50,3 +50,5 @@ Thumbs.db
 .idea/
 cached_calendar.json
 backend/app/services/news/cached_calendar.json
+.kotlin/
+**/android/.kotlin/
