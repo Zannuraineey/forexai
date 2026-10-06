@@ -10,6 +10,7 @@ import '../models/backtest_result.dart';
 import '../models/candle_model.dart';
 import '../models/market_item.dart';
 import '../models/market_context_model.dart';
+import '../models/news_intelligence.dart';
 
 class _CacheEntry {
   final dynamic data;
@@ -469,5 +470,59 @@ class ApiService {
       ttl: const Duration(seconds: 20),
       forceRefresh: forceRefresh,
     );
+  }
+
+  // 8. News Intelligence & DXY APIs
+  static Future<List<EconomicEventModel>> getEconomicEvents() async {
+    final response = await _get('/api/v1/news/events');
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list.map((e) => EconomicEventModel.fromJson(e)).toList();
+    }
+    throw Exception('Failed to fetch economic events');
+  }
+
+  static Future<DXYMetricsModel> getDxyMetrics() async {
+    final response = await _get('/api/v1/news/dxy');
+    if (response.statusCode == 200) {
+      return DXYMetricsModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to fetch DXY metrics');
+  }
+
+  static Future<NewsIntelligenceReportModel> getNewsIntelligence({
+    String? eventId,
+    bool forceRefresh = false,
+  }) async {
+    var path = '/api/v1/news/intelligence';
+    if (eventId != null && eventId.isNotEmpty) {
+      path += '?event_id=$eventId';
+    }
+    return _dedupedGet<NewsIntelligenceReportModel>(
+      path,
+      (json) => NewsIntelligenceReportModel.fromJson(json),
+      ttl: const Duration(seconds: 30),
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  static Future<NewsIntelligenceReportModel> evaluateNewsIntelligence({
+    String? eventId,
+    List<String>? userPairs,
+    String? customNotes,
+  }) async {
+    final response = await _post(
+      '/api/v1/news/intelligence/evaluate',
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        if (eventId != null) 'event_id': eventId,
+        'user_pairs': userPairs ?? ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'BTCUSD'],
+        if (customNotes != null) 'custom_notes': customNotes,
+      }),
+    );
+    if (response.statusCode == 200) {
+      return NewsIntelligenceReportModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to evaluate news intelligence: ${response.statusCode}');
   }
 }

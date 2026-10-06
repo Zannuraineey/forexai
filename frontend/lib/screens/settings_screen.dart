@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
@@ -14,42 +13,29 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  // 1. Symbols
-  List<String> _activeSymbols = [];
-  bool _isLoadingSymbols = false;
-
-  // 2. Sessions
+  // 1. Sessions
   CurrentSessionState? _currentSession;
+  bool _isLoadingSession = false;
 
-  // 3. Timeframes
+  // 2. Timeframes
   String _defaultTimeframe = '15m';
   bool _multiTimeframeConfirmation = true;
 
-  // 4. Notifications & Device
-  final TextEditingController _tokenCtrl = TextEditingController();
-  bool _isLoadingFcm = false;
-  bool _isRegisteringDevice = false;
-  bool _isDeviceRegistered = false;
-  bool _isSendingTestPush = false;
-
-  // 5. Analysis Instructions
+  // 3. Strategy Instructions
   StrategySessionsConfig? _strategyConfig;
   bool _isLoadingStrategy = false;
 
-  // 6. Notification Preferences
+  // 4. Notification Preferences
   bool _notifyValid = true;
   bool _notifyPotential = true;
   bool _notifyWatch = false;
   bool _notifyInvalidated = false;
   int _cooldownMinutes = 15;
 
-  // 7. Data Source
-  final String _dataSourceName = 'Deriv Public WebSocket Gateway';
-  final String _wsEndpoint = 'wss://api.derivws.com/trading/v1/options/ws/public';
-
-  // 8. App Preferences
-  final TextEditingController _urlCtrl =
-      TextEditingController(text: ApiService.baseUrl);
+  // Device push registration state (kept completely silent and secure from end-user)
+  bool _isDeviceRegistered = false;
+  bool _isSendingTestPush = false;
+  String? _cachedFcmToken;
 
   @override
   void initState() {
@@ -58,14 +44,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadAllSettingsData() async {
-    _loadActiveSymbols();
     _loadSessionInfo();
     _loadStrategyInfo();
-    _loadFcmToken();
+    _silentlySyncDeviceToken();
   }
 
-  Future<void> _loadFcmToken() async {
-    setState(() => _isLoadingFcm = true);
+  Future<void> _silentlySyncDeviceToken() async {
     try {
       final messaging = FirebaseMessaging.instance;
       await messaging.requestPermission(
@@ -75,40 +59,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       final token = await messaging.getToken();
       if (token != null && mounted) {
-        setState(() {
-          _tokenCtrl.text = token;
-          _isLoadingFcm = false;
-        });
-        await _registerDevice(silent: true);
-      } else {
-        if (mounted) setState(() => _isLoadingFcm = false);
+        _cachedFcmToken = token;
+        await ApiService.registerDevice(
+          fcmToken: token,
+          platform: 'android',
+        );
+        if (mounted) {
+          setState(() => _isDeviceRegistered = true);
+        }
       }
     } catch (e) {
-      debugPrint('FCM Token load note: $e');
-      if (mounted) setState(() => _isLoadingFcm = false);
-    }
-  }
-
-  Future<void> _loadActiveSymbols() async {
-    setState(() => _isLoadingSymbols = true);
-    try {
-      final syms = await ApiService.getActiveSymbols();
-      if (mounted) {
-        setState(() {
-          _activeSymbols = syms;
-          _isLoadingSymbols = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _isLoadingSymbols = false);
+      debugPrint('Device token sync notice: $e');
     }
   }
 
   Future<void> _loadSessionInfo() async {
+    setState(() => _isLoadingSession = true);
     try {
       final sess = await ApiService.getCurrentSession();
-      if (mounted) setState(() => _currentSession = sess);
-    } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _currentSession = sess;
+          _isLoadingSession = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingSession = false);
+    }
   }
 
   Future<void> _loadStrategyInfo() async {
@@ -126,53 +103,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _saveApiUrl() {
-    final url = _urlCtrl.text.trim();
-    if (url.isNotEmpty) {
-      setState(() => ApiService.baseUrl = url);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: AppTheme.surfaceSubtle,
-          content: Text('Gateway URL set to: $url', style: const TextStyle(color: AppTheme.textPrimary)),
-        ),
-      );
-    }
-  }
-
-  Future<void> _registerDevice({bool silent = false}) async {
-    final token = _tokenCtrl.text.trim();
-    if (token.isEmpty) return;
-    setState(() => _isRegisteringDevice = true);
-    try {
-      await ApiService.registerDevice(
-        fcmToken: token,
-        platform: 'android',
-      );
-      if (mounted) {
-        setState(() => _isDeviceRegistered = true);
-        if (!silent) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: AppTheme.surfaceSubtle,
-              content: Text('Device push token registered with server', style: TextStyle(color: AppTheme.upGreen)),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted && !silent) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppTheme.surfaceSubtle,
-            content: Text('Registration error: $e', style: const TextStyle(color: AppTheme.downRed)),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isRegisteringDevice = false);
-    }
-  }
-
   Future<void> _sendTestPush() async {
     setState(() => _isSendingTestPush = true);
     try {
@@ -184,7 +114,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             content: Text(
               res != null
                   ? '🎯 Test push alert sent! Check your notification bar.'
-                  : 'Test alert submitted to backend.',
+                  : 'Test alert submitted to backend scanner.',
               style: const TextStyle(color: AppTheme.upGreen),
             ),
           ),
@@ -213,7 +143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       isScrollControlled: true,
       backgroundColor: AppTheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) {
         return Padding(
@@ -345,7 +275,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (context, snapshot) {
             return AlertDialog(
               backgroundColor: AppTheme.surface,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               title: Text(
                 '${sessionName.toUpperCase()} Version History',
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
@@ -422,54 +352,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
       backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: const Text('Settings'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 20),
+            tooltip: 'Reload Settings',
             onPressed: _loadAllSettingsData,
           ),
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         children: [
-          // 1. Symbols
-          _buildSectionHeader('1. SYMBOLS & WATCHLIST'),
-          _buildSymbolsCard(),
-          const SizedBox(height: 18),
-
-          // 2. Sessions
-          _buildSectionHeader('2. TRADING SESSIONS'),
+          // 1. Trading Sessions
+          _buildSectionHeader('1. TRADING SESSIONS'),
           _buildSessionsCard(),
           const SizedBox(height: 18),
 
-          // 3. Timeframes
-          _buildSectionHeader('3. TIMEFRAMES'),
+          // 2. Timeframes & Structure
+          _buildSectionHeader('2. TIMEFRAME & EXECUTION'),
           _buildTimeframesCard(),
           const SizedBox(height: 18),
 
-          // 4. Notifications
-          _buildSectionHeader('4. NOTIFICATIONS'),
-          _buildNotificationsCard(),
-          const SizedBox(height: 18),
-
-          // 5. Analysis Instructions
-          _buildSectionHeader('5. STRATEGY INSTRUCTIONS'),
+          // 3. Strategy Instructions
+          _buildSectionHeader('3. STRATEGY INSTRUCTIONS'),
           _buildInstructionsCard(),
           const SizedBox(height: 18),
 
-          // 6. Notification Preferences
-          _buildSectionHeader('6. NOTIFICATION PREFERENCES'),
+          // 4. Notification Preferences
+          _buildSectionHeader('4. NOTIFICATION PREFERENCES'),
           _buildNotificationPreferencesCard(),
-          const SizedBox(height: 18),
-
-          // 7. Data Source
-          _buildSectionHeader('7. DATA SOURCE'),
-          _buildDataSourceCard(),
-          const SizedBox(height: 18),
-
-          // 8. App Preferences
-          _buildSectionHeader('8. APP PREFERENCES'),
-          _buildAppPreferencesCard(),
           const SizedBox(height: 24),
         ],
       ),
@@ -491,60 +406,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // --- 1. Symbols Card ---
-  Widget _buildSymbolsCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Active Pairs', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-              Text(
-                '${_activeSymbols.length} enabled',
-                style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _isLoadingSymbols
-              ? const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textSecondary)))
-              : Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: _activeSymbols.map((sym) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceSubtle,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: AppTheme.border),
-                      ),
-                      child: Text(
-                        sym,
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
-                      ),
-                    );
-                  }).toList(),
-                ),
-          const SizedBox(height: 10),
-          const Text(
-            'To enable/disable pairs (Forex, Metals, Crash & Boom, Indices, Baskets), use the "+ Add Pairs" catalog drawer on the Markets tab.',
-            style: TextStyle(fontSize: 11, color: AppTheme.textMuted, height: 1.3),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- 2. Sessions Card ---
+  // --- 1. Sessions Card ---
   Widget _buildSessionsCard() {
     final active = _currentSession?.activeSessions ?? [];
 
@@ -555,15 +417,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppTheme.border),
       ),
-      child: Column(
-        children: [
-          _buildSessionRow('Asian Session', '00:00 - 08:00 UTC', active.contains('asian')),
-          const Divider(height: 16, color: AppTheme.borderSubtle),
-          _buildSessionRow('London Session', '08:00 - 16:00 UTC (DST Aware)', active.contains('london')),
-          const Divider(height: 16, color: AppTheme.borderSubtle),
-          _buildSessionRow('New York Session', '13:00 - 21:00 UTC (DST Aware)', active.contains('new_york')),
-        ],
-      ),
+      child: _isLoadingSession
+          ? const Center(child: Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textSecondary)))
+          : Column(
+              children: [
+                _buildSessionRow('Asian Session', '00:00 - 08:00 UTC (Tokyo/Sydney)', active.contains('asian')),
+                const Divider(height: 16, color: AppTheme.borderSubtle),
+                _buildSessionRow('London Session', '08:00 - 16:00 UTC (DST-Aware European)', active.contains('london')),
+                const Divider(height: 16, color: AppTheme.borderSubtle),
+                _buildSessionRow('New York Session', '13:00 - 21:00 UTC (US/Killzone Overlap)', active.contains('new_york')),
+              ],
+            ),
     );
   }
 
@@ -599,7 +463,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // --- 3. Timeframes Card ---
+  // --- 2. Timeframes Card ---
   Widget _buildTimeframesCard() {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -641,7 +505,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     Text('Higher Timeframe Trend Bias', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
                     SizedBox(height: 2),
-                    Text('Combines 15m execution with 1H/4H structure', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                    Text('Combines 15m execution with 1H/4H market structure', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
                   ],
                 ),
               ),
@@ -657,135 +521,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // --- 4. Notifications Card ---
-  Widget _buildNotificationsCard() {
-    final hasToken = _tokenCtrl.text.trim().isNotEmpty;
-    final isConnected = hasToken && _isDeviceRegistered;
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Firebase Cloud Messaging (FCM)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: isConnected ? AppTheme.upGreen.withOpacity(0.15) : AppTheme.accent.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: isConnected ? AppTheme.upGreen.withOpacity(0.5) : AppTheme.accent.withOpacity(0.5)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.circle, size: 8, color: isConnected ? AppTheme.upGreen : AppTheme.accent),
-                    const SizedBox(width: 4),
-                    Text(
-                      isConnected ? 'CONNECTED' : (hasToken ? 'READY' : (_isLoadingFcm ? 'FETCHING...' : 'DISCONNECTED')),
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: isConnected ? AppTheme.upGreen : AppTheme.accent,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Your device token allows the 24/7 background AI scanner to send instant push alerts before setup execution.',
-            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, height: 1.3),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _tokenCtrl,
-            maxLines: 2,
-            readOnly: true,
-            style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: AppTheme.textPrimary),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppTheme.background,
-              hintText: _isLoadingFcm ? 'Retrieving Firebase device token...' : 'No FCM Token found yet',
-              hintStyle: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppTheme.border)),
-              suffixIcon: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 18, color: AppTheme.accent),
-                    tooltip: 'Copy Token',
-                    onPressed: hasToken
-                        ? () {
-                            Clipboard.setData(ClipboardData(text: _tokenCtrl.text.trim()));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                backgroundColor: AppTheme.surfaceSubtle,
-                                content: Text('FCM Token copied to clipboard', style: TextStyle(color: AppTheme.upGreen)),
-                              ),
-                            );
-                          }
-                        : null,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh, size: 18, color: AppTheme.textSecondary),
-                    tooltip: 'Refresh Token',
-                    onPressed: _isLoadingFcm ? null : _loadFcmToken,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.app_registration, size: 16),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.surfaceSubtle,
-                    foregroundColor: AppTheme.textPrimary,
-                    side: const BorderSide(color: AppTheme.border),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                  ),
-                  onPressed: (_isRegisteringDevice || !hasToken) ? null : () => _registerDevice(silent: false),
-                  label: Text(_isRegisteringDevice ? 'Registering...' : 'Register Device', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.notifications_active, size: 16, color: AppTheme.upGreen),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.upGreen.withOpacity(0.12),
-                    foregroundColor: AppTheme.upGreen,
-                    side: BorderSide(color: AppTheme.upGreen.withOpacity(0.4)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                  ),
-                  onPressed: _isSendingTestPush ? null : _sendTestPush,
-                  label: Text(_isSendingTestPush ? 'Sending...' : 'Test Push Alert', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- 5. Analysis Instructions Card ---
+  // --- 3. Analysis Instructions Card ---
   Widget _buildInstructionsCard() {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -837,7 +573,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // --- 6. Notification Preferences Card ---
+  // --- 4. Notification Preferences Card ---
   Widget _buildNotificationPreferencesCard() {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -847,15 +583,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
         border: Border.all(color: AppTheme.border),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildPrefToggle('Notify on VALID SETUP', 'Criteria fully satisfied', _notifyValid, (v) => setState(() => _notifyValid = v)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Instant Push Notification Delivery', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _isDeviceRegistered ? AppTheme.upGreen.withOpacity(0.12) : AppTheme.accent.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: _isDeviceRegistered ? AppTheme.upGreen.withOpacity(0.4) : AppTheme.accent.withOpacity(0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.circle, size: 7, color: _isDeviceRegistered ? AppTheme.upGreen : AppTheme.accent),
+                    const SizedBox(width: 4),
+                    Text(
+                      _isDeviceRegistered ? 'CONNECTED' : 'STANDBY',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: _isDeviceRegistered ? AppTheme.upGreen : AppTheme.accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'The AI 24/7 background engine issues high-probability push notifications as soon as a setup aligns with your session rules.',
+            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, height: 1.3),
+          ),
+          const Divider(height: 18, color: AppTheme.borderSubtle),
+          _buildPrefToggle('Notify on VALID SETUP', 'Criteria fully confirmed (ICT displacement + FVG)', _notifyValid, (v) => setState(() => _notifyValid = v)),
           const Divider(height: 12, color: AppTheme.borderSubtle),
-          _buildPrefToggle('Notify on POTENTIAL SETUP', 'Partial criteria aligned', _notifyPotential, (v) => setState(() => _notifyPotential = v)),
+          _buildPrefToggle('Notify on POTENTIAL SETUP', 'Partial criteria aligned; liquidity run in progress', _notifyPotential, (v) => setState(() => _notifyPotential = v)),
           const Divider(height: 12, color: AppTheme.borderSubtle),
-          _buildPrefToggle('Notify on WATCH', 'Early session liquidity sweep', _notifyWatch, (v) => setState(() => _notifyWatch = v)),
+          _buildPrefToggle('Notify on WATCH', 'Early session sweep detected', _notifyWatch, (v) => setState(() => _notifyWatch = v)),
           const Divider(height: 12, color: AppTheme.borderSubtle),
-          _buildPrefToggle('Notify on INVALIDATED', 'Criteria breached or cancelled', _notifyInvalidated, (v) => setState(() => _notifyInvalidated = v)),
-          const Divider(height: 12, color: AppTheme.borderSubtle),
+          _buildPrefToggle('Notify on INVALIDATED', 'Criteria breached or structure broken', _notifyInvalidated, (v) => setState(() => _notifyInvalidated = v)),
+          const Divider(height: 14, color: AppTheme.borderSubtle),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -869,12 +641,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     value: m,
                     child: Text('$m mins', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
                   );
-                }).toList(),
+                }).toList>,
                 onChanged: (val) {
                   if (val != null) setState(() => _cooldownMinutes = val);
                 },
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.notifications_active_rounded, size: 16, color: AppTheme.upGreen),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.upGreen.withOpacity(0.12),
+                foregroundColor: AppTheme.upGreen,
+                side: BorderSide(color: AppTheme.upGreen.withOpacity(0.4)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              onPressed: _isSendingTestPush ? null : _sendTestPush,
+              label: Text(
+                _isSendingTestPush ? 'Dispatching Test Notification...' : 'Send Test Push Alert',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
           ),
         ],
       ),
@@ -899,88 +690,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: onChanged,
         ),
       ],
-    );
-  }
-
-  // --- 7. Data Source Card ---
-  Widget _buildDataSourceCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(_dataSourceName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppTheme.upGreen.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text('STREAMING', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppTheme.upGreen)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(_wsEndpoint, style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: AppTheme.textSecondary)),
-          const SizedBox(height: 10),
-          const Text(
-            'Live quotes and candles are received via WebSocket subscriptions. Missing historic bars are reconstructed automatically on backend launch.',
-            style: TextStyle(fontSize: 11, color: AppTheme.textMuted, height: 1.3),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- 8. App Preferences Card ---
-  Widget _buildAppPreferencesCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Backend Gateway URL', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _urlCtrl,
-            style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: AppTheme.textPrimary),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppTheme.background,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppTheme.border)),
-            ),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.surfaceSubtle,
-                foregroundColor: AppTheme.textPrimary,
-                side: const BorderSide(color: AppTheme.border),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-              ),
-              onPressed: _saveApiUrl,
-              child: const Text('Update Base URL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

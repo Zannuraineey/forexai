@@ -6,7 +6,7 @@ import 'theme/app_theme.dart';
 import 'screens/markets_screen.dart';
 import 'screens/analysis_screen.dart';
 import 'screens/alerts_screen.dart';
-import 'screens/settings_screen.dart';
+import 'screens/news_screen.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -314,7 +314,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
             )
           : const SizedBox.shrink(),
       _loadedTabs.contains(3)
-          ? const SettingsScreen()
+          ? NewsScreen(
+              onSelectInstrumentForAnalysis: _onSelectInstrumentForAnalysis,
+            )
           : const SizedBox.shrink(),
     ];
 
@@ -349,9 +351,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
               label: 'Alerts',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.tune_rounded, size: 20),
-              activeIcon: Icon(Icons.tune_rounded, size: 20),
-              label: 'Settings',
+              icon: Icon(Icons.feed_outlined, size: 20),
+              activeIcon: Icon(Icons.feed_rounded, size: 20),
+              label: 'News',
             ),
           ],
         ),

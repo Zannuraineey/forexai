@@ -5,6 +5,7 @@ import '../models/session_state.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import 'instrument_screen.dart';
+import 'settings_screen.dart';
 
 class MarketsScreen extends StatefulWidget {
   final Function(String symbol) onSelectInstrumentForAnalysis;
@@ -113,6 +114,16 @@ class _MarketsScreenState extends State<MarketsScreen> {
             icon: const Icon(Icons.add_rounded, size: 22),
             tooltip: 'Add / Remove Pairs',
             onPressed: _showCatalogModal,
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, size: 20),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
           ),
         ],
       ),
