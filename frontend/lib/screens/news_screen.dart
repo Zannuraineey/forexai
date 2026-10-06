@@ -393,10 +393,14 @@ class _NewsScreenState extends State<NewsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
               const Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.auto_awesome, size: 14, color: AppTheme.accent),
                   SizedBox(width: 6),
@@ -485,10 +489,14 @@ class _NewsScreenState extends State<NewsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -498,6 +506,7 @@ class _NewsScreenState extends State<NewsScreen> {
                       border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
                     ),
                     child: const Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.currency_exchange, size: 14, color: AppTheme.accent),
                         SizedBox(width: 4),
@@ -549,37 +558,40 @@ class _NewsScreenState extends State<NewsScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 6,
             children: [
-              Text(
-                dxy.value.toStringAsFixed(2),
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.textPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${dxy.changePct >= 0 ? '+' : ''}${dxy.changePct.toStringAsFixed(2)}%',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: dxy.changePct >= 0 ? AppTheme.upGreen : AppTheme.downRed,
-                ),
-              ),
-              const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
                 children: [
                   Text(
-                    'RSI(14): ${dxy.rsi14.toStringAsFixed(1)} | EMA200: ${dxy.ema200.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                    dxy.value.toStringAsFixed(2),
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${dxy.changePct >= 0 ? '+' : ''}${dxy.changePct.toStringAsFixed(2)}%',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: dxy.changePct >= 0 ? AppTheme.upGreen : AppTheme.downRed,
+                    ),
                   ),
                 ],
+              ),
+              Text(
+                'RSI(14): ${dxy.rsi14.toStringAsFixed(1)} | EMA200: ${dxy.ema200.toStringAsFixed(2)}',
+                style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
               ),
             ],
           ),
@@ -929,10 +941,14 @@ class _NewsScreenState extends State<NewsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
               const Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.insights, size: 16, color: AppTheme.accent),
                   SizedBox(width: 6),
@@ -1138,8 +1154,11 @@ class _NewsScreenState extends State<NewsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 6,
                 children: [
                   Text(
                     activeAnalysis.symbol,
@@ -1150,6 +1169,7 @@ class _NewsScreenState extends State<NewsScreen> {
                     ),
                   ),
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1213,14 +1233,19 @@ class _NewsScreenState extends State<NewsScreen> {
                     color: AppTheme.surfaceSubtle,
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildKeyLevelItem('Current', activeAnalysis.keyLevels['current']),
-                      _buildKeyLevelItem('Swing High', activeAnalysis.keyLevels['swing_high']),
-                      _buildKeyLevelItem('Swing Low', activeAnalysis.keyLevels['swing_low']),
-                      _buildKeyLevelItem('Invalidation', activeAnalysis.keyLevels['invalidation']),
-                    ],
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildKeyLevelItem('Current', activeAnalysis.keyLevels['current']),
+                        const SizedBox(width: 14),
+                        _buildKeyLevelItem('Swing High', activeAnalysis.keyLevels['swing_high']),
+                        const SizedBox(width: 14),
+                        _buildKeyLevelItem('Swing Low', activeAnalysis.keyLevels['swing_low']),
+                        const SizedBox(width: 14),
+                        _buildKeyLevelItem('Invalidation', activeAnalysis.keyLevels['invalidation']),
+                      ],
+                    ),
                   ),
                 ),
               ],
