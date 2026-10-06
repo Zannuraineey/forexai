@@ -49,7 +49,7 @@ async def get_notification_system_status(db: AsyncSession = Depends(get_db)):
     from sqlalchemy import select, func
 
     fb_app = _get_firebase_app()
-    stmt = select(func.count(Device.id)).where(Device.is_active == True)
+    stmt = select(func.count(Device.id))
     res = await db.execute(stmt)
     active_devices = res.scalar() or 0
 
