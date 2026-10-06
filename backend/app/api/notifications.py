@@ -39,6 +39,27 @@ async def get_notifications(
     service = NotificationService(db)
     return await service.get_notifications(user_id=1, limit=limit, offset=offset)
 
+@router.get("/notifications/status")
+async def get_notification_system_status(db: AsyncSession = Depends(get_db)):
+    """
+    Returns Firebase Admin SDK initialization status and device count.
+    """
+    from app.services.notifications.notification_service import _get_firebase_app
+    from app.models.analysis import Device
+    from sqlalchemy import select, func
+
+    fb_app = _get_firebase_app()
+    stmt = select(func.count(Device.id)).where(Device.is_active == True)
+    res = await db.execute(stmt)
+    active_devices = res.scalar() or 0
+
+    return {
+        "firebase_initialized": fb_app is not None,
+        "active_devices_count": active_devices,
+        "project_id": fb_app.project_id if fb_app else None,
+        "mode": "LIVE_FCM" if fb_app else "SIMULATED (Set FIREBASE_SERVICE_ACCOUNT_BASE64 on Railway)",
+    }
+
 @router.get("/notifications/settings", response_model=NotificationRuleConfig)
 async def get_notification_settings():
     """

@@ -1,4 +1,6 @@
 import glob
+import json
+import base64
 import logging
 import os
 from datetime import datetime, timezone, timedelta
@@ -21,13 +23,52 @@ from app.schemas.notification import (
 logger = logging.getLogger("forex_ai.notifications")
 
 def _get_firebase_app():
-    """Lazily initializes and caches Firebase Admin app with service account credentials."""
+    """Lazily initializes and caches Firebase Admin app with service account credentials from env or files."""
     if firebase_admin._apps:
         return firebase_admin.get_app()
+
+    # 1. Environment variable: raw JSON string
+    env_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+    if env_json and env_json.strip():
+        try:
+            cert_dict = json.loads(env_json)
+            cred = credentials.Certificate(cert_dict)
+            app = firebase_admin.initialize_app(cred)
+            logger.info("Initialized Firebase Admin SDK from FIREBASE_SERVICE_ACCOUNT_JSON environment variable")
+            return app
+        except Exception as e:
+            logger.warning(f"Failed to initialize Firebase from FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
+
+    # 2. Environment variable: base64 encoded JSON (ideal for Railway/Docker without newline issues)
+    env_b64 = os.environ.get("FIREBASE_SERVICE_ACCOUNT_BASE64")
+    if env_b64 and env_b64.strip():
+        try:
+            raw_json = base64.b64decode(env_b64).decode("utf-8")
+            cert_dict = json.loads(raw_json)
+            cred = credentials.Certificate(cert_dict)
+            app = firebase_admin.initialize_app(cred)
+            logger.info("Initialized Firebase Admin SDK from FIREBASE_SERVICE_ACCOUNT_BASE64 environment variable")
+            return app
+        except Exception as e:
+            logger.warning(f"Failed to initialize Firebase from FIREBASE_SERVICE_ACCOUNT_BASE64: {e}")
+
+    # 3. Environment variable: file path
+    env_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH")
+    if env_path and os.path.exists(env_path):
+        try:
+            cred = credentials.Certificate(env_path)
+            app = firebase_admin.initialize_app(cred)
+            logger.info(f"Initialized Firebase Admin SDK from FIREBASE_SERVICE_ACCOUNT_PATH: {env_path}")
+            return app
+        except Exception as e:
+            logger.warning(f"Failed to initialize Firebase from FIREBASE_SERVICE_ACCOUNT_PATH: {e}")
+
+    # 4. Local files
     candidates = (
         glob.glob("hope-*-firebase-adminsdk-*.json")
         + glob.glob("*-firebase-adminsdk-*.json")
-        + ["firebase-service-account.json"]
+        + glob.glob("app/*-firebase-adminsdk-*.json")
+        + ["firebase-service-account.json", "app/firebase-service-account.json"]
     )
     for path in candidates:
         if os.path.exists(path):
@@ -38,6 +79,8 @@ def _get_firebase_app():
                 return app
             except Exception as e:
                 logger.warning(f"Failed to initialize Firebase with {path}: {e}")
+
+    logger.warning("No Firebase Admin credentials found! (FCM notifications will run in simulated mode until FIREBASE_SERVICE_ACCOUNT_BASE64 or FIREBASE_SERVICE_ACCOUNT_JSON is set)")
     return None
 
 class NotificationService:
