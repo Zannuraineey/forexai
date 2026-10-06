@@ -7,17 +7,31 @@ class EconomicEvent(BaseModel):
     title: str
     country: str = "USD"
     currency: str = "USD"
-    impact: str = Field(description="HIGH, MEDIUM, LOW")
+    impact: str = Field(description="HIGH, MEDIUM, LOW, HOLIDAY")
     event_time_utc: datetime
     actual: Optional[float] = None
     forecast: Optional[float] = None
     previous: Optional[float] = None
     revised: Optional[float] = None
     unit: str = "%"
-    status: str = Field(default="SCHEDULED", description="SCHEDULED, RELEASED, REVISED")
+    status: str = Field(default="SCHEDULED", description="SCHEDULED, RELEASED, REVISED, HOLIDAY")
     meaning: str = Field(description="Institutional explanation of what the event measures and why it matters")
     historical_context: str = Field(description="Context regarding recent historical prints and trends")
     historical_reactions: List[Dict[str, Any]] = Field(default_factory=list, description="Past release reaction data")
+    raw_forecast: Optional[str] = None
+    raw_previous: Optional[str] = None
+    raw_actual: Optional[str] = None
+
+class BreakingNewsItem(BaseModel):
+    id: str
+    title: str
+    summary: str
+    source: str
+    published_at_utc: datetime
+    url: Optional[str] = None
+    currencies: List[str] = Field(default_factory=list)
+    sentiment: str = Field(default="NEUTRAL", description="BULLISH, BEARISH, NEUTRAL")
+    impact: str = Field(default="MEDIUM", description="HIGH, MEDIUM, LOW")
 
 class DXYMetrics(BaseModel):
     value: float
@@ -51,8 +65,29 @@ class NewsIntelligenceReport(BaseModel):
     smc_technical_synthesis: str = Field(description="Combined SMC, market structure, and technical indicators")
     pair_analyses: List[PairImpactAnalysis] = Field(default_factory=list)
     actionable_conclusion: str = Field(description="Clear executive reasoning explaining the complete setup")
+    ai_engine_used: Optional[str] = Field(default="QUANT_MACRO_SYNTHESIS", description="AI Provider e.g. Gemini 1.5, OpenAI GPT-4o, or QUANT_MACRO_SYNTHESIS")
 
 class NewsIntelligenceRequest(BaseModel):
     event_id: Optional[str] = None
     user_pairs: List[str] = Field(default_factory=lambda: ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "BTCUSD"])
     custom_notes: Optional[str] = None
+    custom_query: Optional[str] = None
+    custom_scenario_event: Optional[EconomicEvent] = None
+    custom_api_key: Optional[str] = None
+    ai_model: Optional[str] = None
+
+class AIQueryRequest(BaseModel):
+    query: str
+    user_pairs: List[str] = Field(default_factory=lambda: ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD", "BTCUSD"])
+    custom_api_key: Optional[str] = None
+    ai_model: Optional[str] = None
+
+class AIQueryResponse(BaseModel):
+    query: str
+    ai_analysis: str
+    dxy_context: DXYMetrics
+    market_regime: str
+    pair_analyses: List[PairImpactAnalysis]
+    key_takeaways: List[str] = Field(default_factory=list)
+    timestamp_utc: datetime
+    ai_engine_used: str = "QUANT_MACRO_SYNTHESIS"

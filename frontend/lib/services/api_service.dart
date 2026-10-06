@@ -473,13 +473,56 @@ class ApiService {
   }
 
   // 8. News Intelligence & DXY APIs
-  static Future<List<EconomicEventModel>> getEconomicEvents() async {
-    final response = await _get('/api/v1/news/events');
+  static Future<List<EconomicEventModel>> getEconomicEvents({
+    String? currency,
+    String? impact,
+    bool forceRefresh = false,
+  }) async {
+    final queryParams = <String>[];
+    if (currency != null && currency.isNotEmpty && currency != 'ALL') {
+      queryParams.add('currency=$currency');
+    }
+    if (impact != null && impact.isNotEmpty && impact != 'ALL') {
+      queryParams.add('impact=$impact');
+    }
+    if (forceRefresh) {
+      queryParams.add('force_refresh=true');
+    }
+
+    final path = queryParams.isEmpty
+        ? '/api/v1/news/events'
+        : '/api/v1/news/events?${queryParams.join('&')}';
+
+    final response = await _get(path);
     if (response.statusCode == 200) {
       final list = jsonDecode(response.body) as List<dynamic>;
       return list.map((e) => EconomicEventModel.fromJson(e)).toList();
     }
-    throw Exception('Failed to fetch economic events');
+    throw Exception('Failed to fetch economic events: ${response.statusCode}');
+  }
+
+  static Future<List<BreakingNewsItemModel>> getBreakingNews({
+    String? currency,
+    bool forceRefresh = false,
+  }) async {
+    final queryParams = <String>[];
+    if (currency != null && currency.isNotEmpty && currency != 'ALL') {
+      queryParams.add('currency=$currency');
+    }
+    if (forceRefresh) {
+      queryParams.add('force_refresh=true');
+    }
+
+    final path = queryParams.isEmpty
+        ? '/api/v1/news/breaking'
+        : '/api/v1/news/breaking?${queryParams.join('&')}';
+
+    final response = await _get(path);
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list.map((e) => BreakingNewsItemModel.fromJson(e)).toList();
+    }
+    throw Exception('Failed to fetch breaking news: ${response.statusCode}');
   }
 
   static Future<DXYMetricsModel> getDxyMetrics() async {
@@ -487,7 +530,7 @@ class ApiService {
     if (response.statusCode == 200) {
       return DXYMetricsModel.fromJson(jsonDecode(response.body));
     }
-    throw Exception('Failed to fetch DXY metrics');
+    throw Exception('Failed to fetch DXY metrics: ${response.statusCode}');
   }
 
   static Future<NewsIntelligenceReportModel> getNewsIntelligence({
@@ -510,19 +553,51 @@ class ApiService {
     String? eventId,
     List<String>? userPairs,
     String? customNotes,
+    String? customQuery,
+    String? customApiKey,
+    String? aiModel,
   }) async {
+    final bodyMap = <String, dynamic>{
+      'user_pairs': userPairs ?? ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'BTCUSD'],
+    };
+    if (eventId != null) bodyMap['event_id'] = eventId;
+    if (customNotes != null) bodyMap['custom_notes'] = customNotes;
+    if (customQuery != null) bodyMap['custom_query'] = customQuery;
+    if (customApiKey != null) bodyMap['custom_api_key'] = customApiKey;
+    if (aiModel != null) bodyMap['ai_model'] = aiModel;
+
     final response = await _post(
       '/api/v1/news/intelligence/evaluate',
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        if (eventId != null) 'event_id': eventId,
-        'user_pairs': userPairs ?? ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'BTCUSD'],
-        if (customNotes != null) 'custom_notes': customNotes,
-      }),
+      body: jsonEncode(bodyMap),
     );
     if (response.statusCode == 200) {
       return NewsIntelligenceReportModel.fromJson(jsonDecode(response.body));
     }
     throw Exception('Failed to evaluate news intelligence: ${response.statusCode}');
+  }
+
+  static Future<AIQueryResponseModel> askAiMacroAnalyst({
+    required String query,
+    List<String>? userPairs,
+    String? customApiKey,
+    String? aiModel,
+  }) async {
+    final bodyMap = <String, dynamic>{
+      'query': query,
+      'user_pairs': userPairs ?? ['EURUSD', 'GBPUSD', 'USDJPY', 'XAUUSD', 'BTCUSD'],
+    };
+    if (customApiKey != null) bodyMap['custom_api_key'] = customApiKey;
+    if (aiModel != null) bodyMap['ai_model'] = aiModel;
+
+    final response = await _post(
+      '/api/v1/news/intelligence/query',
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(bodyMap),
+    );
+    if (response.statusCode == 200) {
+      return AIQueryResponseModel.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to query AI macro analyst: ${response.statusCode}');
   }
 }

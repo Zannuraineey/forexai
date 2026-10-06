@@ -32,6 +32,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _notifyInvalidated = false;
   int _cooldownMinutes = 15;
 
+  // 5. AI Reasoning Provider (SaaS)
+  String _selectedAiProvider = 'QUANT_MACRO';
+  final TextEditingController _apiKeyCtrl = TextEditingController();
+
   // Device push registration state (kept completely silent and secure from end-user)
   bool _isDeviceRegistered = false;
   bool _isSendingTestPush = false;
@@ -40,6 +44,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadAllSettingsData();
+  }
+
+  @override
+  void dispose() {
+    _apiKeyCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAllSettingsData() async {
@@ -383,6 +393,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // 4. Notification Preferences
           _buildSectionHeader('4. NOTIFICATION PREFERENCES'),
           _buildNotificationPreferencesCard(),
+          const SizedBox(height: 18),
+
+          // 5. AI Reasoning Engine (SaaS Model)
+          _buildSectionHeader('5. AI MACRO REASONING ENGINE (SAAS)'),
+          _buildAiEngineCard(),
           const SizedBox(height: 24),
         ],
       ),
@@ -688,6 +703,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: onChanged,
         ),
       ],
+    );
+  }
+
+  // --- 5. AI Reasoning Card ---
+  Widget _buildAiEngineCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Active Intelligence Model', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: AppTheme.accent.withValues(alpha: 0.4)),
+                ),
+                child: const Text('INSTITUTIONAL', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.accent)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'The AI engine continuously synthesizes live economic releases, actual-vs-forecast deviations, and order-block liquidity pools.',
+            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, height: 1.3),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _selectedAiProvider,
+            dropdownColor: AppTheme.surface,
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: AppTheme.background,
+              labelText: 'Reasoning Engine',
+              labelStyle: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppTheme.border)),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'QUANT_MACRO', child: Text('Autonomous Quant Engine (Live SMC & Math)', style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
+              DropdownMenuItem(value: 'GEMINI_15_FLASH', child: Text('Google Gemini 1.5/2.5 Flash', style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
+              DropdownMenuItem(value: 'OPENAI_GPT4O', child: Text('OpenAI GPT-4o / GPT-4o-Mini', style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
+            ],
+            onChanged: (val) {
+              if (val != null) setState(() => _selectedAiProvider = val);
+            },
+          ),
+          if (_selectedAiProvider != 'QUANT_MACRO') ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _apiKeyCtrl,
+              obscureText: true,
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                isDense: true,
+                filled: true,
+                fillColor: AppTheme.background,
+                labelText: 'Custom API Key (Optional)',
+                labelStyle: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                hintText: 'Leave empty to use server default key',
+                hintStyle: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppTheme.border)),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -97,4 +97,24 @@ async def test_news_api_endpoints(db_session):
         post_intel = res_post.json()
         assert len(post_intel["pair_analyses"]) == 3
 
+        # 5. Live Breaking News GET
+        res_breaking = await client.get("/api/v1/news/breaking")
+        assert res_breaking.status_code == 200
+        breaking_items = res_breaking.json()
+        assert isinstance(breaking_items, list)
+
+        # 6. Interactive AI Macro Query POST
+        res_query = await client.post(
+            "/api/v1/news/intelligence/query",
+            json={
+                "query": "What happens if US Unemployment Claims spike to 230K?",
+                "user_pairs": ["EURUSD", "XAUUSD"]
+            }
+        )
+        assert res_query.status_code == 200
+        query_data = res_query.json()
+        assert "ai_analysis" in query_data
+        assert len(query_data["key_takeaways"]) > 0
+        assert len(query_data["pair_analyses"]) == 2
+
     app.dependency_overrides.clear()

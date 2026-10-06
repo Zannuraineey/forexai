@@ -13,6 +13,9 @@ class EconomicEventModel {
   final String meaning;
   final String historicalContext;
   final List<dynamic> historicalReactions;
+  final String? rawForecast;
+  final String? rawPrevious;
+  final String? rawActual;
 
   EconomicEventModel({
     required this.id,
@@ -29,13 +32,16 @@ class EconomicEventModel {
     required this.meaning,
     required this.historicalContext,
     required this.historicalReactions,
+    this.rawForecast,
+    this.rawPrevious,
+    this.rawActual,
   });
 
   factory EconomicEventModel.fromJson(Map<String, dynamic> json) {
     return EconomicEventModel(
       id: json['id'] ?? '',
       title: json['title'] ?? '',
-      country: json['country'] ?? 'US',
+      country: json['country'] ?? 'USD',
       currency: json['currency'] ?? 'USD',
       impact: json['impact'] ?? 'HIGH',
       eventTimeUtc: DateTime.tryParse(json['event_time_utc'] ?? '') ?? DateTime.now(),
@@ -47,6 +53,47 @@ class EconomicEventModel {
       meaning: json['meaning'] ?? '',
       historicalContext: json['historical_context'] ?? '',
       historicalReactions: json['historical_reactions'] as List<dynamic>? ?? [],
+      rawForecast: json['raw_forecast'],
+      rawPrevious: json['raw_previous'],
+      rawActual: json['raw_actual'],
+    );
+  }
+}
+
+class BreakingNewsItemModel {
+  final String id;
+  final String title;
+  final String summary;
+  final String source;
+  final DateTime publishedAtUtc;
+  final String? url;
+  final List<String> currencies;
+  final String sentiment;
+  final String impact;
+
+  BreakingNewsItemModel({
+    required this.id,
+    required this.title,
+    required this.summary,
+    required this.source,
+    required this.publishedAtUtc,
+    this.url,
+    required this.currencies,
+    required this.sentiment,
+    required this.impact,
+  });
+
+  factory BreakingNewsItemModel.fromJson(Map<String, dynamic> json) {
+    return BreakingNewsItemModel(
+      id: json['id'] ?? '',
+      title: json['title'] ?? '',
+      summary: json['summary'] ?? '',
+      source: json['source'] ?? 'Financial Wire',
+      publishedAtUtc: DateTime.tryParse(json['published_at_utc'] ?? '') ?? DateTime.now(),
+      url: json['url'],
+      currencies: (json['currencies'] as List<dynamic>? ?? []).map((e) => e.toString()).toList(),
+      sentiment: json['sentiment'] ?? 'NEUTRAL',
+      impact: json['impact'] ?? 'MEDIUM',
     );
   }
 }
@@ -135,6 +182,7 @@ class NewsIntelligenceReportModel {
   final String smcTechnicalSynthesis;
   final List<PairImpactAnalysisModel> pairAnalyses;
   final String actionableConclusion;
+  final String aiEngineUsed;
 
   NewsIntelligenceReportModel({
     required this.id,
@@ -147,6 +195,7 @@ class NewsIntelligenceReportModel {
     required this.smcTechnicalSynthesis,
     required this.pairAnalyses,
     required this.actionableConclusion,
+    required this.aiEngineUsed,
   });
 
   factory NewsIntelligenceReportModel.fromJson(Map<String, dynamic> json) {
@@ -165,6 +214,50 @@ class NewsIntelligenceReportModel {
       smcTechnicalSynthesis: json['smc_technical_synthesis'] ?? '',
       pairAnalyses: pairsList,
       actionableConclusion: json['actionable_conclusion'] ?? '',
+      aiEngineUsed: json['ai_engine_used'] ?? 'QUANT_MACRO_SYNTHESIS',
+    );
+  }
+}
+
+class AIQueryResponseModel {
+  final String query;
+  final String aiAnalysis;
+  final DXYMetricsModel dxyContext;
+  final String marketRegime;
+  final List<PairImpactAnalysisModel> pairAnalyses;
+  final List<String> keyTakeaways;
+  final DateTime timestampUtc;
+  final String aiEngineUsed;
+
+  AIQueryResponseModel({
+    required this.query,
+    required this.aiAnalysis,
+    required this.dxyContext,
+    required this.marketRegime,
+    required this.pairAnalyses,
+    required this.keyTakeaways,
+    required this.timestampUtc,
+    required this.aiEngineUsed,
+  });
+
+  factory AIQueryResponseModel.fromJson(Map<String, dynamic> json) {
+    final pairsList = (json['pair_analyses'] as List<dynamic>? ?? [])
+        .map((e) => PairImpactAnalysisModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    final takeaways = (json['key_takeaways'] as List<dynamic>? ?? [])
+        .map((e) => e.toString())
+        .toList();
+
+    return AIQueryResponseModel(
+      query: json['query'] ?? '',
+      aiAnalysis: json['ai_analysis'] ?? '',
+      dxyContext: DXYMetricsModel.fromJson(json['dxy_context'] ?? {}),
+      marketRegime: json['market_regime'] ?? 'NEUTRAL',
+      pairAnalyses: pairsList,
+      keyTakeaways: takeaways,
+      timestampUtc: DateTime.tryParse(json['timestamp_utc'] ?? '') ?? DateTime.now(),
+      aiEngineUsed: json['ai_engine_used'] ?? 'QUANT_MACRO_SYNTHESIS',
     );
   }
 }

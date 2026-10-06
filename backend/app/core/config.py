@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     DERIV_WS_URL: str = Field(default="wss://api.derivws.com/trading/v1/options/ws/public")
     DERIV_API_TOKEN: str = Field(default="")
 
+    # AI Reasoning Models (Gemini, OpenAI, Anthropic, or Local)
+    AI_API_KEY: str = Field(default="")
+    GEMINI_API_KEY: str = Field(default="")
+    OPENAI_API_KEY: str = Field(default="")
+    AI_MODEL_NAME: str = Field(default="gemini-1.5-flash")
+
     # Initial Instruments
     TARGET_INSTRUMENTS: List[str] = [
         "XAUUSD",
