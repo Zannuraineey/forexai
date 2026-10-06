@@ -1,6 +1,6 @@
 from typing import List, Optional
 from app.schemas.news import EconomicEvent, BreakingNewsItem
-from app.services.news.live_news_service import LiveNewsService
+from .live_news_service import LiveNewsService
 
 # Global shared instance with in-memory caching
 _shared_live_news_service = LiveNewsService()

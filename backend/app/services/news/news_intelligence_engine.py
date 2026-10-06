@@ -16,8 +16,8 @@ from app.schemas.news import (
     AIQueryRequest,
     AIQueryResponse,
 )
-from app.services.news.dxy_service import DXYService
-from app.services.news.economic_calendar_service import EconomicCalendarService
+from .dxy_service import DXYService
+from .economic_calendar_service import EconomicCalendarService
 
 logger = logging.getLogger("forex_ai.news_intelligence")
 
