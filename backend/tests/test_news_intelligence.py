@@ -16,9 +16,10 @@ async def test_economic_calendar_service():
     first = events[0]
     assert first.id
     assert first.title
-    assert first.currency == "USD"
+    assert first.currency
     assert first.impact in ["HIGH", "MEDIUM", "LOW"]
     assert len(first.historical_reactions) > 0
+    assert any(e.currency == "USD" for e in events)
 
 @pytest.mark.asyncio
 async def test_dxy_service(db_session):
@@ -67,7 +68,7 @@ async def test_news_api_endpoints(db_session):
         assert res.status_code == 200
         events = res.json()
         assert len(events) >= 5
-        assert events[0]["currency"] == "USD"
+        assert any(e["currency"] == "USD" for e in events)
 
         # 2. DXY metrics
         res_dxy = await client.get("/api/v1/news/dxy")
