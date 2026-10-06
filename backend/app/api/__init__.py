@@ -7,6 +7,7 @@ from app.api.sessions import router as sessions_router
 from app.api.strategy import router as strategy_router
 from app.api.analysis import router as analysis_router
 from app.api.notifications import router as notifications_router
+from app.api.news import router as news_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -17,3 +18,5 @@ api_router.include_router(sessions_router)
 api_router.include_router(strategy_router)
 api_router.include_router(analysis_router)
 api_router.include_router(notifications_router)
+api_router.include_router(news_router)
+
