@@ -1,0 +1,50 @@
+# Environments & Secrets
+.env
+.env.*
+*.env
+*-firebase-adminsdk-*.json
+firebase-service-account.json
+
+# Databases & Local state
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+env/
+
+# Flutter & Dart
+**/build/
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+
+# Android build outputs
+frontend/android/app/debug/
+frontend/android/app/profile/
+frontend/android/app/release/
+frontend/build/
+**/android/.gradle/
+**/android/local.properties
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/

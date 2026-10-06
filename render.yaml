@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: forex-ai-backend
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: standard
+    region: frankfurt
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: forex-ai-postgres
+          property: connectionString
+      - key: DERIV_APP_ID
+        sync: false
+      - key: DERIV_API_TOKEN
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+
+databases:
+  - name: forex-ai-postgres
+    plan: standard
+    region: frankfurt
+    databaseName: forex_ai
+    user: forex_ai_user

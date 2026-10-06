@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1037006805353",
+    "project_id": "hope-457913",
+    "storage_bucket": "hope-457913.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1037006805353:android:c003c42c21c6593a5985f8",
+        "android_client_info": {
+          "package_name": "com.forexai.platform.frontend"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD6e5UXJxdu-Nd82NxupAdAeM1wsK2uUP4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
