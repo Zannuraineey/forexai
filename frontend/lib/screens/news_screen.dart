@@ -7,9 +7,9 @@ class NewsScreen extends StatefulWidget {
   final Function(String)? onSelectInstrumentForAnalysis;
 
   const NewsScreen({
-    Key? key,
+    super.key,
     this.onSelectInstrumentForAnalysis,
-  }) : super(key: key);
+  });
 
   @override
   State<NewsScreen> createState() => _NewsScreenState();
@@ -270,10 +270,10 @@ class _NewsScreenState extends State<NewsScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: p.directional_bias == 'BULLISH' ? AppTheme.upGreen.withValues(alpha: 0.12) : (p.directional_bias == 'BEARISH' ? AppTheme.downRed.withValues(alpha: 0.12) : AppTheme.surfaceSubtle),
+                          color: p.directionalBias == 'BULLISH' ? AppTheme.upGreen.withValues(alpha: 0.12) : (p.directionalBias == 'BEARISH' ? AppTheme.downRed.withValues(alpha: 0.12) : AppTheme.surfaceSubtle),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text(p.directional_bias, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: p.directional_bias == 'BULLISH' ? AppTheme.upGreen : (p.directional_bias == 'BEARISH' ? AppTheme.downRed : AppTheme.textSecondary))),
+                        child: Text(p.directionalBias, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: p.directionalBias == 'BULLISH' ? AppTheme.upGreen : (p.directionalBias == 'BEARISH' ? AppTheme.downRed : AppTheme.textSecondary))),
                       ),
                     ],
                   ),

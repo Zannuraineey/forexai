@@ -158,6 +158,8 @@ class PairImpactAnalysisModel {
     required this.tradeThesis,
   });
 
+  String get directional_bias => directionalBias;
+
   factory PairImpactAnalysisModel.fromJson(Map<String, dynamic> json) {
     return PairImpactAnalysisModel(
       symbol: json['symbol'] ?? '',
