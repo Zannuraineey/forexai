@@ -30,7 +30,8 @@ class DXYService:
             .limit(1)
         )
         res = await self.db.execute(stmt)
-        return res.scalar_one_or_none()
+        val = res.scalar_one_or_none()
+        return float(val) if val is not None else None
 
     async def get_recent_candles(self, symbol: str, limit: int = 50) -> List[Candle]:
         """Fetches chronological recent candles for technical/SMC evaluation."""
@@ -54,12 +55,12 @@ class DXYService:
         # 1. Check if direct USD basket (WLDUSD) is present with live data
         basket_price = await self.get_latest_price("WLDUSD")
         
-        # 2. Get constituent major prices
-        eur = await self.get_latest_price("EURUSD") or 1.1240
-        gbp = await self.get_latest_price("GBPUSD") or 1.3240
-        jpy = await self.get_latest_price("USDJPY") or 158.20
-        cad = await self.get_latest_price("USDCAD") or 1.4270
-        chf = await self.get_latest_price("USDCHF") or 0.8315
+        # 2. Get constituent major prices (strictly float)
+        eur = float(await self.get_latest_price("EURUSD") or 1.1240)
+        gbp = float(await self.get_latest_price("GBPUSD") or 1.3240)
+        jpy = float(await self.get_latest_price("USDJPY") or 158.20)
+        cad = float(await self.get_latest_price("USDCAD") or 1.4270)
+        chf = float(await self.get_latest_price("USDCHF") or 0.8315)
 
         # 3. Calculate DXY via standard geometric weighted basket
         try:
@@ -71,14 +72,14 @@ class DXYService:
                 * math.pow(chf, 0.036)
             )
             # Normalize to standard DXY index scale (~100.0 - 106.0)
-            dxy_val = round(dxy_val, 3)
+            dxy_val = round(float(dxy_val), 3)
         except Exception as e:
             logger.warning(f"Error computing standard DXY formula: {e}. Fallback to benchmark index.")
             dxy_val = 104.25
 
         # 4. Technical and SMC Structure Analysis using constituent price action (EURUSD inverse proxy)
         eur_candles = await self.get_recent_candles("EURUSD", limit=30)
-        closes = [c.close for c in eur_candles] if eur_candles else [eur]
+        closes = [float(c.close) for c in eur_candles] if eur_candles else [eur]
         
         # Invert EUR closes to represent DXY trend
         dxy_closes = []
@@ -86,7 +87,7 @@ class DXYService:
             try:
                 dxy_closes.append(
                     50.14348112
-                    * math.pow(c_val, -0.576)
+                    * math.pow(float(c_val), -0.576)
                     * math.pow(jpy, 0.136)
                     * math.pow(gbp, -0.119)
                     * math.pow(cad, 0.091)

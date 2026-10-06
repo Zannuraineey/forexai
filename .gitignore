@@ -48,3 +48,5 @@ Thumbs.db
 *.swo
 .vscode/
 .idea/
+cached_calendar.json
+backend/app/services/news/cached_calendar.json

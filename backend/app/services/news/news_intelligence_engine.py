@@ -306,9 +306,9 @@ class NewsIntelligenceEngine:
             s = sym.upper()
             candles = await self.dxy_service.get_recent_candles(s, limit=30)
             if candles:
-                curr_p = candles[-1].close
-                sw_high = round(max(c.high for c in candles), 4)
-                sw_low = round(min(c.low for c in candles), 4)
+                curr_p = float(candles[-1].close)
+                sw_high = round(float(max(float(c.high) for c in candles)), 4)
+                sw_low = round(float(min(float(c.low) for c in candles)), 4)
                 data[s] = {
                     "current": curr_p,
                     "swing_high": sw_high,
@@ -334,9 +334,9 @@ class NewsIntelligenceEngine:
         for s, p_info in pairs_data.items():
             is_usd_base = s.startswith("USD")
             is_usd_quote = s.endswith("USD")
-            curr_p = p_info.get("current", 1.0)
-            sw_high = p_info.get("swing_high", curr_p * 1.005)
-            sw_low = p_info.get("swing_low", curr_p * 0.995)
+            curr_p = float(p_info.get("current", 1.0))
+            sw_high = float(p_info.get("swing_high", curr_p * 1.005))
+            sw_low = float(p_info.get("swing_low", curr_p * 0.995))
 
             if is_usd_base:
                 corr = "DIRECT"
