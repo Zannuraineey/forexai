@@ -7,17 +7,41 @@ from app.core.logging import logger
 class Base(DeclarativeBase):
     pass
 
+from sqlalchemy.engine import make_url
+
+FALLBACK_SQLITE_URL = "sqlite+aiosqlite:///./forex_ai.db"
+
 # Choose database URL depending on environment or overrides
 def get_engine_url() -> str:
     if settings.ENVIRONMENT == "test":
         return settings.TEST_DATABASE_URL
-    url = settings.DATABASE_URL
+
+    raw_url = str(settings.DATABASE_URL or "").strip()
+    if not raw_url or raw_url.startswith("${"):
+        logger.warning(
+            f"DATABASE_URL is not set or contains an unresolved placeholder ({raw_url!r}). "
+            f"Defaulting to persistent SQLite: {FALLBACK_SQLITE_URL}"
+        )
+        return FALLBACK_SQLITE_URL
+
+    url = raw_url
     # Normalise standard postgresql URLs for SQLAlchemy asyncpg
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgresql://") and "+asyncpg" not in url:
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    return url
+
+    try:
+        parsed = make_url(url)
+        if not parsed.drivername:
+            raise ValueError("No drivername")
+        return url
+    except Exception as exc:
+        logger.warning(
+            f"Could not parse DATABASE_URL ({raw_url!r}: {exc}). "
+            f"Defaulting to persistent SQLite: {FALLBACK_SQLITE_URL}"
+        )
+        return FALLBACK_SQLITE_URL
 
 engine = create_async_engine(
     get_engine_url(),
