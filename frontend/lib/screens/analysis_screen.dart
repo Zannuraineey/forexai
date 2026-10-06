@@ -86,8 +86,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       final results = await Future.wait([analysisFuture, contextFuture, utBotFuture]);
       setState(() {
         _analysis = results[0] as AIAnalysisRecord;
-        _contextData = results[1] as MarketContextData;
-        _utBotData = results[2].isNotEmpty ? (results[2] as Map<String, dynamic>) : null;
+        final utMap = results[2];
+        _utBotData = (utMap is Map && utMap.isNotEmpty) ? (utMap as Map<String, dynamic>) : null;
         _isLoading = false;
       });
     } catch (e) {

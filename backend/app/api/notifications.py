@@ -71,3 +71,41 @@ async def test_notification_dispatch(
         created_at=datetime.now(timezone.utc),
     )
     return await service.evaluate_and_dispatch(dummy_analysis, user_id=1)
+
+@router.post("/notifications/settings", response_model=NotificationRuleConfig)
+async def update_notification_settings(config: NotificationRuleConfig):
+    """
+    Updates notification rule configuration including user-selected UT Bot pairs.
+    """
+    NotificationService.DEFAULT_CONFIG = config
+    return NotificationService.DEFAULT_CONFIG
+
+@router.post("/notifications/test-ut-bot", response_model=Optional[NotificationRead])
+async def test_ut_bot_dispatch(
+    symbol: str = "R_75",
+    timeframe: str = "15m",
+    signal: str = "BUY",
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Triggers an immediate test UT Bot push notification for a user-selected pair.
+    """
+    service = NotificationService(db)
+    test_result = {
+        "signal": signal.upper(),
+        "current_price": 451.25,
+        "trailing_stop": 448.10,
+        "ema_200": 446.50,
+        "rsi": 58.2,
+    }
+    cfg = NotificationService.DEFAULT_CONFIG.model_copy()
+    cfg.cooldown_minutes = 0
+    if symbol.upper() not in [p.upper() for p in cfg.ut_bot_pairs]:
+        cfg.ut_bot_pairs.append(symbol.upper())
+    return await service.dispatch_ut_bot_alert(
+        symbol=symbol.upper(),
+        timeframe=timeframe,
+        ut_result=test_result,
+        user_id=1,
+        rule_cfg=cfg,
+    )

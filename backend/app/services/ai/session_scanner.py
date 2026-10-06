@@ -109,20 +109,53 @@ class SessionScannerWorker:
                         "results": [],
                     }
 
-                # Notification config: alert on VALID_SETUP and POTENTIAL_SETUP with 15 min cooldown
-                notif_config = NotificationRuleConfig(
-                    notify_on_valid_setup=True,
-                    notify_on_potential_setup=True,
-                    notify_on_watch=False,
-                    notify_on_invalidation=False,
-                    cooldown_minutes=15,
-                    symbols_whitelist=[],
-                )
+                notif_config = NotificationService.DEFAULT_CONFIG
                 notif_svc = NotificationService(db)
                 ai_engine = AIAnalysisEngine(db)
 
                 # Institutional execution timeframes to scan
                 timeframes = ["5m", "15m"]
+
+                # 3. Scan UT Bot for User-Selected Pairs Only
+                if notif_config.notify_on_ut_bot and notif_config.ut_bot_pairs:
+                    from app.services.ai.ut_bot import UTBotEngine
+                    from app.models.candle import Candle
+                    from app.schemas.candle import CandleRead
+                    from sqlalchemy import desc
+
+                    for ut_sym in notif_config.ut_bot_pairs:
+                        ut_sym_upper = ut_sym.upper()
+                        inst_match = next((i for i in instruments if i.symbol.upper() == ut_sym_upper), None)
+                        if not inst_match:
+                            continue
+
+                        for tf in timeframes:
+                            try:
+                                c_stmt = (
+                                    select(Candle)
+                                    .where(Candle.instrument_id == inst_match.id, Candle.timeframe == tf)
+                                    .order_by(desc(Candle.timestamp_utc))
+                                    .limit(60)
+                                )
+                                c_res = await db.execute(c_stmt)
+                                candles = [CandleRead.model_validate(c) for c in reversed(c_res.scalars().all())]
+                                if len(candles) >= 10:
+                                    sens = 1.5 if ("R_" in ut_sym_upper or "VOLATILITY" in ut_sym_upper or "1HZ" in ut_sym_upper) else 1.2
+                                    ut_eval = UTBotEngine.evaluate(candles, sensitivity=sens, atr_period=10)
+                                    if ut_eval.get("signal") in ["BUY", "SELL"]:
+                                        logger.info(f"⚡ [SessionScanner] UT Bot {ut_eval['signal']} on selected pair {ut_sym_upper} ({tf})")
+                                        notif_record = await notif_svc.dispatch_ut_bot_alert(
+                                            symbol=ut_sym_upper,
+                                            timeframe=tf,
+                                            ut_result=ut_eval,
+                                            user_id=1,
+                                            rule_cfg=notif_config,
+                                        )
+                                        if notif_record:
+                                            self._total_notifications_sent += 1
+                                            logger.info(f"📱 [SessionScanner] Dispatched UT Bot push alert #{notif_record.id} for {ut_sym_upper}")
+                            except Exception as ut_err:
+                                logger.debug(f"[SessionScanner] UT Bot error on {ut_sym_upper} ({tf}): {ut_err}")
 
                 for inst in instruments:
                     symbol = inst.symbol.upper()
@@ -145,8 +178,10 @@ class SessionScannerWorker:
                             }
                             cycle_results.append(item_res)
 
-                            # If setup confirmed or preparing, dispatch push notification
-                            if analysis_record.state in [AnalysisStateEnum.VALID_SETUP, AnalysisStateEnum.POTENTIAL_SETUP]:
+                            # If setup confirmed, dispatch push notification (suppressing unconfirmed noise)
+                            if analysis_record.state == AnalysisStateEnum.VALID_SETUP or (
+                                notif_config.notify_on_potential_setup and analysis_record.state == AnalysisStateEnum.POTENTIAL_SETUP
+                            ):
                                 setups_found += 1
                                 logger.info(
                                     f"🎯 [SessionScanner] {analysis_record.state.value} on {symbol} ({tf}) in {active_session}: {analysis_record.summary}"

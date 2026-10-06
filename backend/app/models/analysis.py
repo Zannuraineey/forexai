@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 import enum
 from sqlalchemy import (
     BigInteger, Integer, String, Text, Boolean, DateTime,
@@ -60,8 +61,8 @@ class Notification(Base):
     id: Mapped[int] = mapped_column(
         BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True
     )
-    analysis_id: Mapped[int] = mapped_column(
-        BigInteger().with_variant(Integer, "sqlite"), ForeignKey("analysis_results.id", ondelete="CASCADE"), nullable=False
+    analysis_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), ForeignKey("analysis_results.id", ondelete="CASCADE"), nullable=True
     )
     user_id: Mapped[int] = mapped_column(Integer, nullable=False)
     channel: Mapped[str] = mapped_column(String(20), default="fcm")

@@ -55,6 +55,8 @@ class NotificationService:
         notify_on_potential_setup=False,
         notify_on_watch=False,
         notify_on_invalidation=False,
+        notify_on_ut_bot=True,
+        ut_bot_pairs=["R_75"],
         cooldown_minutes=15,
         symbols_whitelist=[],
     )
@@ -221,6 +223,135 @@ class NotificationService:
 
         logger.info(f"Dispatched notification {notification_record.id} for analysis {analysis.id} to {len(devices)} device(s) ({sent_count} live FCM delivered).")
         return NotificationRead.model_validate(notification_record)
+
+    async def dispatch_ut_bot_alert(
+        self,
+        symbol: str,
+        timeframe: str,
+        ut_result: dict,
+        user_id: int = 1,
+        rule_cfg: Optional[NotificationRuleConfig] = None,
+    ) -> Optional[NotificationRead]:
+        """
+        Dispatches a dedicated FCM push notification for UT Bot signals (BUY/SELL)
+        specifically filtered for user-selected pairs.
+        """
+        cfg = rule_cfg or self.DEFAULT_CONFIG
+        if not cfg.notify_on_ut_bot:
+            return None
+
+        sym = symbol.upper()
+        # Verify symbol is in user's selected UT Bot pairs
+        if cfg.ut_bot_pairs and sym not in [p.upper() for p in cfg.ut_bot_pairs]:
+            logger.debug(f"UT Bot alert skipped: {sym} not in user selected ut_bot_pairs {cfg.ut_bot_pairs}.")
+            return None
+
+        signal = ut_result.get("signal", "WAIT")
+        if signal not in ["BUY", "SELL"]:
+            return None
+
+        # Check deduplication & cooldown
+        cooldown_threshold = datetime.now(timezone.utc) - timedelta(minutes=cfg.cooldown_minutes)
+        dedup_stmt = (
+            select(Notification)
+            .where(
+                Notification.user_id == user_id,
+                Notification.created_at >= cooldown_threshold,
+            )
+            .order_by(desc(Notification.created_at))
+        )
+        recent_res = await self.db.execute(dedup_stmt)
+        recent_notifications = recent_res.scalars().all()
+
+        for notif in recent_notifications:
+            p = notif.payload or {}
+            if (
+                p.get("strategy") == "ut_bot"
+                and p.get("symbol") == sym
+                and p.get("timeframe") == timeframe
+                and p.get("signal") == signal
+            ):
+                logger.info(f"UT Bot notification suppressed due to {cfg.cooldown_minutes}m cooldown for {sym}.")
+                return None
+
+        # Fetch Devices
+        dev_stmt = select(Device).where(Device.user_id == user_id)
+        dev_res = await self.db.execute(dev_stmt)
+        devices = dev_res.scalars().all()
+
+        price = ut_result.get("current_price", 0.0)
+        trail = ut_result.get("trailing_stop", 0.0)
+        ema = ut_result.get("ema_200", 0.0)
+        rsi = ut_result.get("rsi", 50.0)
+
+        if signal == "BUY":
+            title = f"⚡ UT BOT BUY: {sym} ({timeframe})"
+            body = f"Price ({price:.4f}) crossed above trailing stop ({trail:.4f}). EMA200: {ema:.4f}, RSI: {rsi:.1f}."
+        else:
+            title = f"⚡ UT BOT SELL: {sym} ({timeframe})"
+            body = f"Price ({price:.4f}) crossed below trailing stop ({trail:.4f}). EMA200: {ema:.4f}, RSI: {rsi:.1f}."
+
+        payload = {
+            "strategy": "ut_bot",
+            "symbol": sym,
+            "timeframe": timeframe,
+            "signal": signal,
+            "price": str(price),
+            "trailing_stop": str(trail),
+            "ema_200": str(ema),
+            "rsi": str(rsi),
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        }
+
+        fb_app = _get_firebase_app()
+        sent_count = 0
+        if fb_app and devices:
+            android_config = messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    sound="default",
+                    priority="max",
+                    default_vibrate_timings=True,
+                    channel_id="forex_ai_alerts",
+                    icon="ic_stat_notification",
+                    color="#10B981" if signal == "BUY" else "#EF4444",
+                ),
+            )
+            for dev in devices:
+                try:
+                    msg = messaging.Message(
+                        notification=messaging.Notification(
+                            title=title,
+                            body=body,
+                        ),
+                        data={k: str(v) for k, v in payload.items()},
+                        android=android_config,
+                        token=dev.fcm_token,
+                    )
+                    messaging.send(msg)
+                    sent_count += 1
+                    logger.info(f"FCM UT Bot push delivered to {sym} on device token {dev.fcm_token[:12]}...")
+                except Exception as e:
+                    logger.warning(f"Failed to deliver FCM UT Bot push: {e}")
+
+        status_val = "SENT" if (devices and sent_count > 0) else ("SENT_SIMULATED" if devices else "PENDING_NO_DEVICES")
+        now = datetime.now(timezone.utc)
+        record = Notification(
+            analysis_id=None,
+            user_id=user_id,
+            channel="fcm",
+            title=title,
+            body=body,
+            payload=payload,
+            sent_at=now if devices else None,
+            status=status_val,
+            created_at=now,
+        )
+        self.db.add(record)
+        await self.db.commit()
+        await self.db.refresh(record)
+        logger.info(f"Dispatched UT Bot notification {record.id} for {sym} ({sent_count} live FCM delivered).")
+        return NotificationRead.model_validate(record)
 
     async def get_notifications(
         self, user_id: int = 1, limit: int = 50, offset: int = 0

@@ -22,12 +22,14 @@ class NotificationRuleConfig(BaseModel):
     notify_on_potential_setup: bool = False
     notify_on_watch: bool = False
     notify_on_invalidation: bool = False
+    notify_on_ut_bot: bool = True
+    ut_bot_pairs: List[str] = ["R_75"]
     cooldown_minutes: int = 15
     symbols_whitelist: List[str] = []
 
 class NotificationRead(BaseModel):
     id: int
-    analysis_id: int
+    analysis_id: Optional[int] = None
     user_id: int
     channel: str
     title: str
