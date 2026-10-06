@@ -49,6 +49,7 @@ class _MarketsScreenState extends State<MarketsScreen> {
       if (mounted) {
         setState(() {
           _items = items;
+          _errorMessage = null;
         });
       }
     } catch (_) {}
@@ -61,20 +62,25 @@ class _MarketsScreenState extends State<MarketsScreen> {
     });
 
     try {
-      final sessionFuture = ApiService.getCurrentSession();
-      final watchlistFuture = ApiService.getWatchlistSummary();
+      final sessionFuture = ApiService.getCurrentSession(forceRefresh: true);
+      final watchlistFuture = ApiService.getWatchlistSummary(forceRefresh: true);
 
       final results = await Future.wait([sessionFuture, watchlistFuture]);
-      setState(() {
-        _sessionState = results[0] as CurrentSessionState;
-        _items = results[1] as List<MarketItem>;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _sessionState = results[0] as CurrentSessionState;
+          _items = results[1] as List<MarketItem>;
+          _isLoading = false;
+          _errorMessage = null;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 

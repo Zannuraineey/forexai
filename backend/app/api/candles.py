@@ -41,10 +41,12 @@ async def get_watchlist_summary(
     is_weekend = now_utc.weekday() >= 5 or (now_utc.weekday() == 6 and now_utc.hour < 21)
 
     for inst in instruments:
-        # Check 1m timeframe first for real-time live price, fallback to 15m
-        candles = await svc.get_candles(symbol=inst.symbol, timeframe="1m", limit=2)
+        # Fast in-memory/DB read without triggering blocking WebSocket connections
+        candles = await svc.get_candles(symbol=inst.symbol, timeframe="1m", limit=2, auto_fetch=False)
         if not candles:
-            candles = await svc.get_candles(symbol=inst.symbol, timeframe="15m", limit=2)
+            candles = await svc.get_candles(symbol=inst.symbol, timeframe="15m", limit=2, auto_fetch=False)
+        if not candles:
+            candles = await svc.get_candles(symbol=inst.symbol, timeframe="1h", limit=2, auto_fetch=False)
         price = None
         change_pct = 0.0
 

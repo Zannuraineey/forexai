@@ -20,13 +20,7 @@ class _CacheEntry {
 class ApiService {
   static String baseUrl = 'https://forexai.up.railway.app';
 
-  static final List<String> candidateUrls = [
-    'https://forexai.up.railway.app',
-    'http://192.168.0.3:8000',
-    'http://127.0.0.1:8000',
-    'http://localhost:8000',
-    'http://10.0.2.2:8000',
-  ];
+  static final List<String> candidateUrls = ['https://forexai.up.railway.app'];
 
   static final Map<String, Future<dynamic>> _inFlight = {};
   static final Map<String, _CacheEntry> _cache = {};
@@ -74,7 +68,7 @@ class ApiService {
   /// Internal resilient GET wrapper that automatically falls back across candidates
   static Future<http.Response> _get(
     String path, {
-    Duration timeout = const Duration(seconds: 4),
+    Duration timeout = const Duration(seconds: 15),
   }) async {
     // 1. Try current baseUrl
     try {
@@ -87,7 +81,7 @@ class ApiService {
         try {
           final res = await http
               .get(Uri.parse('$candidate$path'))
-              .timeout(const Duration(seconds: 2));
+              .timeout(const Duration(seconds: 4));
           if (res.statusCode == 200 || res.statusCode == 404) {
             baseUrl = candidate; // auto-switch to active responsive bridge
             return res;
@@ -103,7 +97,7 @@ class ApiService {
     String path, {
     Map<String, String>? headers,
     Object? body,
-    Duration timeout = const Duration(seconds: 6),
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     try {
       final res = await http
@@ -116,7 +110,7 @@ class ApiService {
         try {
           final res = await http
               .post(Uri.parse('$candidate$path'), headers: headers, body: body)
-              .timeout(const Duration(seconds: 3));
+              .timeout(const Duration(seconds: 5));
           baseUrl = candidate;
           return res;
         } catch (_) {}
@@ -130,7 +124,7 @@ class ApiService {
     String path, {
     Map<String, String>? headers,
     Object? body,
-    Duration timeout = const Duration(seconds: 6),
+    Duration timeout = const Duration(seconds: 20),
   }) async {
     try {
       final res = await http

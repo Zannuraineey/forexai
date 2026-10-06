@@ -143,6 +143,7 @@ class CandleService:
         start_utc: Optional[datetime] = None,
         end_utc: Optional[datetime] = None,
         limit: int = 500,
+        auto_fetch: bool = True,
     ) -> List[CandleRead]:
         """Fetch candles for an instrument, ordered chronologically ascending."""
         inst = await self.ensure_instrument(symbol)
@@ -161,7 +162,7 @@ class CandleService:
         candles = list(result.scalars().all())
 
         # If database has insufficient candle history, auto-fetch on-demand from provider
-        if len(candles) < 15 and not start_utc:
+        if auto_fetch and len(candles) < 15 and not start_utc:
             try:
                 from app.services.market_data import get_market_data_provider
                 provider = get_market_data_provider("deriv")
