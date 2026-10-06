@@ -38,7 +38,5 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         }
     }
 
-    if not is_overall_healthy:
-        raise HTTPException(status_code=503, detail=payload)
-
     return payload
+

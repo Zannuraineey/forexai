@@ -11,7 +11,13 @@ class Base(DeclarativeBase):
 def get_engine_url() -> str:
     if settings.ENVIRONMENT == "test":
         return settings.TEST_DATABASE_URL
-    return settings.DATABASE_URL
+    url = settings.DATABASE_URL
+    # Normalise standard postgresql URLs for SQLAlchemy asyncpg
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
 
 engine = create_async_engine(
     get_engine_url(),
@@ -42,9 +48,8 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     """
     Initialize database tables.
-    If local PostgreSQL is offline in development, automatically falls back
-    to local persistent SQLite (forex_ai.db) so the backend runs seamlessly.
-    Production on Render uses managed PostgreSQL via DATABASE_URL.
+    If PostgreSQL is unreachable or offline, automatically falls back to local
+    persistent SQLite (forex_ai.db) so the backend runs seamlessly on Railway / Render.
     """
     global engine, async_session_factory
     try:
@@ -52,9 +57,9 @@ async def init_db() -> None:
             await conn.run_sync(Base.metadata.create_all)
         logger.info(f"Database tables initialized successfully using {engine.url.drivername}.")
     except Exception as exc:
-        if "postgresql" in str(engine.url) and settings.ENVIRONMENT == "development":
+        if "sqlite" not in str(engine.url):
             logger.warning(
-                f"Local PostgreSQL not detected at {engine.url.host}:{engine.url.port} ({exc}). "
+                f"PostgreSQL connection to {engine.url.host or 'database'} failed ({exc}). "
                 "Automatically falling back to persistent local SQLite database (sqlite+aiosqlite:///./forex_ai.db)."
             )
             fallback_url = "sqlite+aiosqlite:///./forex_ai.db"
