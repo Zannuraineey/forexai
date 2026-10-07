@@ -9,9 +9,9 @@ class AnalysisScreen extends StatefulWidget {
   final String initialSymbol;
 
   const AnalysisScreen({
-    Key? key,
+    super.key,
     this.initialSymbol = 'EURUSD',
-  }) : super(key: key);
+  });
 
   @override
   State<AnalysisScreen> createState() => _AnalysisScreenState();
@@ -265,7 +265,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   Widget _buildMetaInfoBar() {
     final parsedTime = DateTime.tryParse(_analysis?.timestampUtc ?? '') ?? DateTime.now();
     final timeStr = _analysis != null
-        ? DateFormat('HH:mm:ss').format(parsedTime.toUtc()) + ' UTC'
+        ? '${DateFormat('HH:mm:ss').format(parsedTime.toUtc())} UTC'
         : '—';
     final session = _analysis?.sessionName.toUpperCase() ?? 'OFF-SESSION';
     final version = 'v${_analysis?.instructionVersionId ?? 1}.0';
@@ -472,7 +472,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: stateColor.withOpacity(0.5)),
+        border: Border.all(color: stateColor.withValues(alpha: 0.5)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -693,10 +693,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(6),
@@ -810,10 +814,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 4,
                     children: [
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.timer_outlined, size: 13, color: signalColor),
                           const SizedBox(width: 5),
