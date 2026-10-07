@@ -22,6 +22,8 @@ class DXYService:
 
     async def get_latest_price(self, symbol: str) -> Optional[float]:
         """Fetches latest closed candle close price for a symbol."""
+        if not self.db:
+            return None
         stmt = (
             select(Candle.close)
             .join(Instrument, Candle.instrument_id == Instrument.id)
@@ -35,6 +37,8 @@ class DXYService:
 
     async def get_recent_candles(self, symbol: str, limit: int = 50) -> List[Candle]:
         """Fetches chronological recent candles for technical/SMC evaluation."""
+        if not self.db:
+            return []
         stmt = (
             select(Candle)
             .join(Instrument, Candle.instrument_id == Instrument.id)

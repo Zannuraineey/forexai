@@ -27,6 +27,28 @@ class LiveNewsService:
         self._last_news_fetch: Optional[datetime] = None
         self._calendar_ttl = timedelta(minutes=45)
         self._news_ttl = timedelta(minutes=10)
+        self._hydrate_from_disk()
+
+    def _hydrate_from_disk(self):
+        if os.path.exists(CALENDAR_CACHE_FILE):
+            try:
+                with open(CALENDAR_CACHE_FILE, "r", encoding="utf-8") as f:
+                    raw_items = json.load(f)
+                if isinstance(raw_items, list) and raw_items:
+                    parsed = []
+                    for idx, item in enumerate(raw_items):
+                        try:
+                            ev = self._parse_calendar_item(item, idx)
+                            if ev:
+                                parsed.append(ev)
+                        except Exception:
+                            pass
+                    if parsed:
+                        self._cached_events = parsed
+                        self._last_calendar_fetch = datetime.now(timezone.utc)
+                        logger.info(f"Pre-hydrated {len(parsed)} live economic events from disk cache on init.")
+            except Exception as e:
+                logger.warning(f"Failed to pre-hydrate calendar cache: {e}")
 
     # -------------------------------------------------------------
     # 1. LIVE ECONOMIC CALENDAR
@@ -51,9 +73,12 @@ class LiveNewsService:
 
     def get_event_by_id(self, event_id: str) -> Optional[EconomicEvent]:
         for e in self._cached_events:
-            if e.id == event_id:
+            if e.id == event_id or e.id.lower() == event_id.lower():
                 return e
-        return None
+        for e in self._cached_events:
+            if event_id.lower() in e.id.lower() or e.id.lower() in event_id.lower():
+                return e
+        return self._cached_events[0] if self._cached_events else None
 
     async def _refresh_calendar(self):
         raw_items = []
@@ -154,6 +179,53 @@ class LiveNewsService:
         hist_context = self._infer_historical_context(title, country, impact)
         hist_reactions = self._infer_historical_reactions(title, country, dt, prev_val, fc_val, unit)
 
+        # Compute dynamic consensus expectation & directional triggers from live numbers
+        consensus_expectation = None
+        deviation_bias = None
+        bullish_trigger = None
+        bearish_trigger = None
+
+        if act_val is not None:
+            baseline = fc_val if fc_val is not None else prev_val
+            if baseline is not None:
+                diff = act_val - baseline
+                if abs(diff) < 0.0001:
+                    deviation_bias = "IN_LINE"
+                    consensus_expectation = f"IN-LINE: Actual ({act_val}{unit}) matched expected ({baseline}{unit}). Neutral market reaction."
+                elif diff > 0:
+                    deviation_bias = "BEAT"
+                    consensus_expectation = f"HAWKISH BEAT: Actual ({act_val}{unit}) exceeded consensus ({baseline}{unit}) by +{diff:+.2f}{unit}. Positive catalyst for {country}."
+                else:
+                    deviation_bias = "MISSED"
+                    consensus_expectation = f"DOVISH MISS: Actual ({act_val}{unit}) missed consensus ({baseline}{unit}) by {diff:+.2f}{unit}. Downward pressure on {country}."
+            else:
+                deviation_bias = "RELEASED"
+                consensus_expectation = f"RELEASED: Actual print is {act_val}{unit}."
+        else:
+            deviation_bias = "AWAITING_RELEASE"
+            if fc_val is not None and prev_val is not None:
+                diff = fc_val - prev_val
+                if diff > 0:
+                    consensus_expectation = f"EXPANSION PRICED IN: Forecast ({fc_val}{unit}) > Prior ({prev_val}{unit}). Market expects accelerating data. Beat confirms continuation."
+                elif diff < 0:
+                    consensus_expectation = f"COOLING PRICED IN: Forecast ({fc_val}{unit}) < Prior ({prev_val}{unit}). Market expects softening. Surprise beat sparks aggressive short squeeze."
+                else:
+                    consensus_expectation = f"STABLE CONSENSUS: Forecast matches prior print ({fc_val}{unit}). Clean deviation will catalyze directional displacement."
+            elif fc_val is not None:
+                consensus_expectation = f"CONSENSUS TARGET: Forecast is {fc_val}{unit}. Actual reading above forecast will support {country}."
+            elif prev_val is not None:
+                consensus_expectation = f"PRIOR BENCHMARK: Prior reading was {prev_val}{unit}. Market benchmarking release against previous level."
+            else:
+                consensus_expectation = f"MONETARY/SPEECH CATALYST: Focus on forward guidance, interest rate remarks, and liquidity tone."
+
+        benchmark_val = fc_val if fc_val is not None else prev_val
+        if benchmark_val is not None:
+            bullish_trigger = f"Actual > {benchmark_val}{unit} → Hawkish {country} expansion (Buy {country} pairs)"
+            bearish_trigger = f"Actual < {benchmark_val}{unit} → Dovish {country} contraction (Sell {country} pairs)"
+        else:
+            bullish_trigger = f"Hawkish tone / higher policy rates → Bullish {country}"
+            bearish_trigger = f"Dovish tone / rate cut hints → Bearish {country}"
+
         return EconomicEvent(
             id=ev_id,
             title=title,
@@ -172,6 +244,10 @@ class LiveNewsService:
             raw_forecast=raw_fc or None,
             raw_previous=raw_prev or None,
             raw_actual=raw_act or None,
+            consensus_expectation=consensus_expectation,
+            deviation_bias=deviation_bias,
+            bullish_trigger=bullish_trigger,
+            bearish_trigger=bearish_trigger,
         )
 
     def _extract_num_and_unit(self, s: Optional[str]) -> tuple[Optional[float], str]:
@@ -256,27 +332,21 @@ class LiveNewsService:
         ]
         evs = []
         for title, curr, imp, act, fc, prev, unit, ev_time in items:
-            evs.append(
-                EconomicEvent(
-                    id=f"{curr.lower()}_{re.sub(r'[^a-zA-Z0-9]+', '_', title).lower()}",
-                    title=title,
-                    country=curr,
-                    currency=curr,
-                    impact=imp,
-                    event_time_utc=ev_time,
-                    actual=act,
-                    forecast=fc,
-                    previous=prev,
-                    unit=unit,
-                    status="RELEASED" if act is not None else "SCHEDULED",
-                    meaning=self._infer_event_meaning(title, curr),
-                    historical_context=self._infer_historical_context(title, curr, imp),
-                    historical_reactions=self._infer_historical_reactions(title, curr, ev_time, prev, fc, unit),
-                    raw_forecast=f"{fc}{unit}" if fc is not None else None,
-                    raw_previous=f"{prev}{unit}" if prev is not None else None,
-                    raw_actual=f"{act}{unit}" if act is not None else None,
-                )
-            )
+            raw_act_s = f"{act}{unit}" if act is not None else ""
+            raw_fc_s = f"{fc}{unit}" if fc is not None else ""
+            raw_prev_s = f"{prev}{unit}" if prev is not None else ""
+            parsed = self._parse_calendar_item({
+                "title": title,
+                "country": curr,
+                "currency": curr,
+                "impact": imp,
+                "date": ev_time.isoformat(),
+                "actual": raw_act_s,
+                "forecast": raw_fc_s,
+                "previous": raw_prev_s,
+            })
+            if parsed:
+                evs.append(parsed)
         return evs
 
     # -------------------------------------------------------------

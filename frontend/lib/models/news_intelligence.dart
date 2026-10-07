@@ -16,6 +16,10 @@ class EconomicEventModel {
   final String? rawForecast;
   final String? rawPrevious;
   final String? rawActual;
+  final String? consensusExpectation;
+  final String? deviationBias;
+  final String? bullishTrigger;
+  final String? bearishTrigger;
 
   EconomicEventModel({
     required this.id,
@@ -35,6 +39,10 @@ class EconomicEventModel {
     this.rawForecast,
     this.rawPrevious,
     this.rawActual,
+    this.consensusExpectation,
+    this.deviationBias,
+    this.bullishTrigger,
+    this.bearishTrigger,
   });
 
   factory EconomicEventModel.fromJson(Map<String, dynamic> json) {
@@ -56,6 +64,10 @@ class EconomicEventModel {
       rawForecast: json['raw_forecast'],
       rawPrevious: json['raw_previous'],
       rawActual: json['raw_actual'],
+      consensusExpectation: json['consensus_expectation'],
+      deviationBias: json['deviation_bias'],
+      bullishTrigger: json['bullish_trigger'],
+      bearishTrigger: json['bearish_trigger'],
     );
   }
 }

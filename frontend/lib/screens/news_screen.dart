@@ -103,6 +103,14 @@ class _NewsScreenState extends State<NewsScreen> {
     }
   }
 
+  EconomicEventModel? get _activeEvent {
+    if (_selectedEventId != null) {
+      final match = _events.where((e) => e.id == _selectedEventId).toList();
+      if (match.isNotEmpty) return match.first;
+    }
+    return _intelligenceReport?.event ?? (_events.isNotEmpty ? _events.first : null);
+  }
+
   Future<void> _loadNewsData({bool forceRefresh = false}) async {
     setState(() {
       _isLoading = true;
@@ -371,6 +379,10 @@ class _NewsScreenState extends State<NewsScreen> {
                   // 5. Active Stream List
                   if (_activeStreamTab == 0) ...[
                     _buildEventsCarousel(),
+                    if (_activeEvent != null) ...[
+                      const SizedBox(height: 10),
+                      _buildSelectedEventIntelligenceCard(_activeEvent!),
+                    ],
                   ] else ...[
                     _buildBreakingNewsList(),
                   ],
@@ -768,7 +780,7 @@ class _NewsScreenState extends State<NewsScreen> {
     }
 
     return SizedBox(
-      height: 125,
+      height: 132,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: _events.length,
@@ -785,11 +797,16 @@ class _NewsScreenState extends State<NewsScreen> {
   Widget _buildEventItem(EconomicEventModel ev, bool isSelected) {
     final hasActual = ev.actual != null;
     final isHigh = ev.impact == 'HIGH';
+    final isBeat = ev.deviationBias == 'BEAT';
+    final isMissed = ev.deviationBias == 'MISSED';
+    final Color actualColor = isBeat
+        ? AppTheme.upGreen
+        : (isMissed ? AppTheme.downRed : (hasActual ? AppTheme.upGreen : AppTheme.textMuted));
 
     return GestureDetector(
       onTap: () => _selectEvent(ev.id),
       child: Container(
-        width: 220,
+        width: 226,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: isSelected ? AppTheme.surfaceSubtle : AppTheme.surface,
@@ -824,6 +841,33 @@ class _NewsScreenState extends State<NewsScreen> {
                         ),
                       ),
                     ),
+                    if (ev.deviationBias != null) ...[
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: isBeat
+                              ? AppTheme.upGreen.withValues(alpha: 0.15)
+                              : (isMissed ? AppTheme.downRed.withValues(alpha: 0.15) : AppTheme.surfaceSubtle),
+                          borderRadius: BorderRadius.circular(2),
+                          border: Border.all(
+                            color: isBeat
+                                ? AppTheme.upGreen.withValues(alpha: 0.3)
+                                : (isMissed ? AppTheme.downRed.withValues(alpha: 0.3) : AppTheme.border),
+                          ),
+                        ),
+                        child: Text(
+                          ev.deviationBias!,
+                          style: TextStyle(
+                            fontSize: 7.5,
+                            fontWeight: FontWeight.w700,
+                            color: isBeat
+                                ? AppTheme.upGreen
+                                : (isMissed ? AppTheme.downRed : AppTheme.textMuted),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 Text(
@@ -853,7 +897,7 @@ class _NewsScreenState extends State<NewsScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildMetricCol('ACTUAL', ev.rawActual ?? (ev.actual != null ? '${ev.actual}${ev.unit}' : '--'), hasActual ? AppTheme.upGreen : AppTheme.textMuted),
+                _buildMetricCol('ACTUAL', ev.rawActual ?? (ev.actual != null ? '${ev.actual}${ev.unit}' : '--'), actualColor),
                 _buildMetricCol('FORECAST', ev.rawForecast ?? (ev.forecast != null ? '${ev.forecast}${ev.unit}' : '--'), AppTheme.textSecondary),
                 _buildMetricCol('PREVIOUS', ev.rawPrevious ?? (ev.previous != null ? '${ev.previous}${ev.unit}' : '--'), AppTheme.textMuted),
               ],
@@ -872,6 +916,271 @@ class _NewsScreenState extends State<NewsScreen> {
         const SizedBox(height: 1.5),
         Text(val, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: valColor)),
       ],
+    );
+  }
+
+  // --- Selected Event Live Intelligence Card ---
+  Widget _buildSelectedEventIntelligenceCard(EconomicEventModel ev) {
+    final hasActual = ev.actual != null;
+    final isBeat = ev.deviationBias == 'BEAT';
+    final isMissed = ev.deviationBias == 'MISSED';
+    final biasColor = isBeat
+        ? AppTheme.upGreen
+        : (isMissed ? AppTheme.downRed : (hasActual ? AppTheme.surfaceSubtle : AppTheme.accent));
+
+    final actualDisplay = ev.rawActual ?? (ev.actual != null ? '${ev.actual}${ev.unit}' : '--');
+    final forecastDisplay = ev.rawForecast ?? (ev.forecast != null ? '${ev.forecast}${ev.unit}' : '--');
+    final previousDisplay = ev.rawPrevious ?? (ev.previous != null ? '${ev.previous}${ev.unit}' : '--');
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceSubtle,
+                      borderRadius: BorderRadius.circular(2),
+                      border: Border.all(color: AppTheme.border),
+                    ),
+                    child: Text(
+                      '${ev.currency} • ${ev.impact} IMPACT',
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                  if (ev.deviationBias != null) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: biasColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: biasColor.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        ev.deviationBias!,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: biasColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              Text(
+                'TIME: ${_formatEventCountdown(ev.eventTimeUtc)}',
+                style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppTheme.textMuted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            ev.title,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // 3-Column Metrics Comparison Grid
+          Row(
+            children: [
+              Expanded(
+                child: _buildValueBox(
+                  'ACTUAL PRINT',
+                  actualDisplay,
+                  hasActual ? (isBeat ? AppTheme.upGreen : (isMissed ? AppTheme.downRed : AppTheme.textPrimary)) : AppTheme.textMuted,
+                  isHighlighted: hasActual,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildValueBox(
+                  'CONSENSUS FORECAST',
+                  forecastDisplay,
+                  AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildValueBox(
+                  'PREVIOUS BASELINE',
+                  previousDisplay,
+                  AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+
+          // Live Consensus Expectation
+          if (ev.consensusExpectation != null && ev.consensusExpectation!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppTheme.background,
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(color: AppTheme.borderSubtle),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'LIVE CONSENSUS EXPECTATION',
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textMuted,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    ev.consensusExpectation!,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Directional Scenario Triggers
+          if (ev.bullishTrigger != null || ev.bearishTrigger != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (ev.bullishTrigger != null)
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: AppTheme.upGreen.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(color: AppTheme.upGreen.withValues(alpha: 0.2)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '▲ HAWKISH / BULLISH TRIGGER',
+                            style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.upGreen,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            ev.bullishTrigger!,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (ev.bullishTrigger != null && ev.bearishTrigger != null) const SizedBox(width: 6),
+                if (ev.bearishTrigger != null)
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: AppTheme.downRed.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(color: AppTheme.downRed.withValues(alpha: 0.2)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '▼ DOVISH / BEARISH TRIGGER',
+                            style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.downRed,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            ev.bearishTrigger!,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildValueBox(String label, String value, Color valueColor, {bool isHighlighted = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: isHighlighted ? AppTheme.surfaceSubtle : AppTheme.background,
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(
+          color: isHighlighted ? AppTheme.accent.withValues(alpha: 0.3) : AppTheme.borderSubtle,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 7.5,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: valueColor,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

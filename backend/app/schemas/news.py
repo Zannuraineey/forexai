@@ -21,6 +21,10 @@ class EconomicEvent(BaseModel):
     raw_forecast: Optional[str] = None
     raw_previous: Optional[str] = None
     raw_actual: Optional[str] = None
+    consensus_expectation: Optional[str] = Field(None, description="What forecast vs previous indicates how the event should be")
+    deviation_bias: Optional[str] = Field(None, description="BEAT, MISSED, IN_LINE, or AWAITING_RELEASE")
+    bullish_trigger: Optional[str] = Field(None, description="What reading will trigger bullish expansion")
+    bearish_trigger: Optional[str] = Field(None, description="What reading will trigger bearish contraction")
 
 class BreakingNewsItem(BaseModel):
     id: str
