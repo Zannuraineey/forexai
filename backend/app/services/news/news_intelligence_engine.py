@@ -52,7 +52,11 @@ class NewsIntelligenceEngine:
             event = self.calendar_service.get_event_by_id(req.event_id)
         else:
             all_events = self.calendar_service.get_all_events()
-            event = all_events[0] if all_events else self.calendar_service.get_event_by_id("default")
+            event = all_events[0] if all_events else None
+
+        if not event:
+            all_events = self.calendar_service.get_all_events()
+            event = all_events[0] if all_events else self.calendar_service._svc._generate_dynamic_live_schedule()[0]
 
         # 2. Compute Live Real-time DXY Metrics & SMC Trajectory from live price feeds
         dxy = await self.dxy_service.calculate_dxy_index()

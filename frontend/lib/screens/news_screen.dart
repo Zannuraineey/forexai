@@ -340,7 +340,11 @@ class _NewsScreenState extends State<NewsScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: const Text('MARKET INTELLIGENCE & EVENT RADAR'),
+        title: const FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text('MARKET INTELLIGENCE & EVENT RADAR'),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, size: 18),
@@ -523,39 +527,45 @@ class _NewsScreenState extends State<NewsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Text(
-                    'DXY (US DOLLAR INDEX)',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                    decoration: BoxDecoration(
-                      color: trendColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    child: Text(
-                      dxy.trend,
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        color: trendColor,
+              Expanded(
+                child: Row(
+                  children: [
+                    const Flexible(
+                      child: Text(
+                        'DXY (DOLLAR INDEX)',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: trendColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: Text(
+                        dxy.trend,
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w700,
+                          color: trendColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 6),
               Text(
                 'REGIME: ${dxy.marketRegime}',
                 style: const TextStyle(
-                  fontSize: 10,
+                  fontSize: 9.5,
                   fontWeight: FontWeight.w600,
                   color: AppTheme.textSecondary,
                 ),
@@ -1614,27 +1624,14 @@ class _NewsScreenState extends State<NewsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'ORDER DENSITY & POOL CONCENTRATION',
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textSecondary,
-                  letterSpacing: 0.4,
-                ),
-              ),
-              Text(
-                density.orderVolumeConcentration.replaceAll('_', ' '),
-                style: const TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textMuted,
-                ),
-              ),
-            ],
+          const Text(
+            'ORDER DENSITY & POOL CONCENTRATION',
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textSecondary,
+              letterSpacing: 0.4,
+            ),
           ),
           const SizedBox(height: 8),
           Row(
@@ -1690,6 +1687,17 @@ class _NewsScreenState extends State<NewsScreen> {
               ),
             ],
           ),
+          if (density.orderVolumeConcentration.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              density.orderVolumeConcentration.replaceAll('_', ' '),
+              style: const TextStyle(
+                fontSize: 9.5,
+                color: AppTheme.textSecondary,
+                height: 1.3,
+              ),
+            ),
+          ],
           if (density.orderBlockZone.isNotEmpty) ...[
             const SizedBox(height: 6),
             Row(
@@ -1734,15 +1742,19 @@ class _NewsScreenState extends State<NewsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'MANIPULATION & LIQUIDITY TRAP',
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textSecondary,
-                  letterSpacing: 0.4,
+              const Flexible(
+                child: Text(
+                  'MANIPULATION & LIQUIDITY TRAP',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textSecondary,
+                    letterSpacing: 0.4,
+                  ),
                 ),
               ),
+              const SizedBox(width: 6),
               Text(
                 'JUDAS RISK: ${manip.judasSwingRisk}',
                 style: TextStyle(
@@ -1883,19 +1895,19 @@ class _NewsScreenState extends State<NewsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Text(
-                    'ORDER DIRECTIVE: ${blueprint.action.replaceAll('_', ' ')}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: actionColor,
-                      letterSpacing: 0.4,
-                    ),
+              Expanded(
+                child: Text(
+                  'ORDER DIRECTIVE: ${blueprint.action.replaceAll('_', ' ')}',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: actionColor,
+                    letterSpacing: 0.4,
                   ),
-                ],
+                ),
               ),
+              const SizedBox(width: 6),
               Text(
                 'R:R ${blueprint.riskRewardRatio}',
                 style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppTheme.textSecondary),
@@ -1972,15 +1984,19 @@ class _NewsScreenState extends State<NewsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'VOLATILITY & DISPLACEMENT',
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textSecondary,
-                  letterSpacing: 0.4,
+              const Flexible(
+                child: Text(
+                  'VOLATILITY & DISPLACEMENT',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textSecondary,
+                    letterSpacing: 0.4,
+                  ),
                 ),
               ),
+              const SizedBox(width: 6),
               Text(
                 '±${spike.estimatedVolatilityPips.toStringAsFixed(1)} PIPS',
                 style: TextStyle(
