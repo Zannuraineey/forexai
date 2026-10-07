@@ -69,6 +69,27 @@ class SessionEngine:
     }
 
     @classmethod
+    def get_killzone_info(cls, dt_utc: datetime) -> Dict[str, Any]:
+        """
+        Institutional Killzone Identifier (DST & UTC normalized):
+        - London Open Killzone: 07:00 - 10:00 UTC (A+)
+        - New York Open Killzone: 12:00 - 14:00 UTC (A+)
+        - NYSE Cash Open / Judas Window: 14:30 - 16:00 UTC (A+)
+        - London Close Killzone: 16:30 - 18:30 UTC (A+)
+        - Off-Killzone Consolidation: Grade B
+        """
+        t = dt_utc.time()
+        if time(7, 0) <= t < time(10, 0):
+            return {"is_killzone": True, "name": "London Open Killzone", "grade": "Grade A+"}
+        elif time(12, 0) <= t < time(14, 0):
+            return {"is_killzone": True, "name": "NY Open Killzone", "grade": "Grade A+"}
+        elif time(14, 30) <= t < time(16, 0):
+            return {"is_killzone": True, "name": "NYSE Cash Open (Judas Window)", "grade": "Grade A+"}
+        elif time(16, 30) <= t < time(18, 30):
+            return {"is_killzone": True, "name": "London Close Killzone", "grade": "Grade A+"}
+        return {"is_killzone": False, "name": "Off-Killzone Session", "grade": "Grade B"}
+
+    @classmethod
     def get_session_window(
         cls, session_name: str, target_date: date, dt_utc: datetime
     ) -> SessionWindowInfo:

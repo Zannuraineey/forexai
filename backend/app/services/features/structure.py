@@ -28,6 +28,8 @@ class LiquiditySweep(BaseModel):
     extreme_price: float
     sweep_depth_pips: float
     closed_inside: bool
+    rejection_wick_ratio: float = 0.0
+    is_exhaustion_candle: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -243,9 +245,12 @@ class MarketStructureAnalyzer:
 
         window = candles[-lookback:]
         for candle in window:
+            c_range = candle.high - candle.low
             if reference_high is not None and candle.high > reference_high:
                 if candle.close <= reference_high:
                     depth_pips = round((candle.high - reference_high) / pip_size, 1)
+                    upper_wick = candle.high - max(candle.open, candle.close)
+                    wick_ratio = round(upper_wick / c_range, 2) if c_range > 0 else 0.0
                     sweeps.append(
                         LiquiditySweep(
                             level_type=f"{level_label_prefix}_HIGH",
@@ -254,11 +259,15 @@ class MarketStructureAnalyzer:
                             extreme_price=candle.high,
                             sweep_depth_pips=depth_pips,
                             closed_inside=True,
+                            rejection_wick_ratio=wick_ratio,
+                            is_exhaustion_candle=(wick_ratio >= 0.35),
                         )
                     )
             if reference_low is not None and candle.low < reference_low:
                 if candle.close >= reference_low:
                     depth_pips = round((reference_low - candle.low) / pip_size, 1)
+                    lower_wick = min(candle.open, candle.close) - candle.low
+                    wick_ratio = round(lower_wick / c_range, 2) if c_range > 0 else 0.0
                     sweeps.append(
                         LiquiditySweep(
                             level_type=f"{level_label_prefix}_LOW",
@@ -267,6 +276,8 @@ class MarketStructureAnalyzer:
                             extreme_price=candle.low,
                             sweep_depth_pips=depth_pips,
                             closed_inside=True,
+                            rejection_wick_ratio=wick_ratio,
+                            is_exhaustion_candle=(wick_ratio >= 0.35),
                         )
                     )
         return sweeps
