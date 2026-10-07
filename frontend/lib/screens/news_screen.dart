@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/news_intelligence.dart';
@@ -16,6 +17,7 @@ class NewsScreen extends StatefulWidget {
 }
 
 class _NewsScreenState extends State<NewsScreen> {
+  Timer? _countdownTimer;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -64,12 +66,35 @@ class _NewsScreenState extends State<NewsScreen> {
   void initState() {
     super.initState();
     _loadNewsData();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _queryCtrl.dispose();
     super.dispose();
+  }
+
+  String _formatEventCountdown(DateTime eventTimeUtc) {
+    final diff = eventTimeUtc.difference(DateTime.now().toUtc());
+    if (diff.isNegative) {
+      final passed = diff.abs();
+      if (passed.inMinutes < 15) {
+        return '🔴 LIVE SPIKE';
+      } else if (passed.inHours < 1) {
+        return '+${passed.inMinutes}m ago';
+      } else {
+        return '+${passed.inHours}h ago';
+      }
+    } else {
+      final hours = diff.inHours.toString().padLeft(2, '0');
+      final minutes = (diff.inMinutes % 60).toString().padLeft(2, '0');
+      final seconds = (diff.inSeconds % 60).toString().padLeft(2, '0');
+      return '⏳ $hours:$minutes:$seconds';
+    }
   }
 
   Future<void> _loadNewsData({bool forceRefresh = false}) async {
@@ -812,12 +837,32 @@ class _NewsScreenState extends State<NewsScreen> {
                     ),
                   ),
                 ),
-                Text(
-                  ev.status,
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: hasActual ? AppTheme.upGreen : AppTheme.textMuted,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: ev.eventTimeUtc.difference(DateTime.now().toUtc()).isNegative &&
+                            ev.eventTimeUtc.difference(DateTime.now().toUtc()).abs().inMinutes < 15
+                        ? AppTheme.downRed.withValues(alpha: 0.2)
+                        : (hasActual ? AppTheme.upGreen.withValues(alpha: 0.12) : AppTheme.accent.withValues(alpha: 0.12)),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: ev.eventTimeUtc.difference(DateTime.now().toUtc()).isNegative &&
+                              ev.eventTimeUtc.difference(DateTime.now().toUtc()).abs().inMinutes < 15
+                          ? AppTheme.downRed
+                          : (hasActual ? AppTheme.upGreen.withValues(alpha: 0.3) : AppTheme.accent.withValues(alpha: 0.3)),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: Text(
+                    _formatEventCountdown(ev.eventTimeUtc),
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w800,
+                      color: ev.eventTimeUtc.difference(DateTime.now().toUtc()).isNegative &&
+                              ev.eventTimeUtc.difference(DateTime.now().toUtc()).abs().inMinutes < 15
+                          ? AppTheme.downRed
+                          : (hasActual ? AppTheme.upGreen : AppTheme.accent),
+                    ),
                   ),
                 ),
               ],
@@ -976,6 +1021,29 @@ class _NewsScreenState extends State<NewsScreen> {
               ),
             ],
           ),
+          if (report.spikeWarning != null && report.spikeWarning!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.downRed.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: AppTheme.downRed.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 16, color: AppTheme.downRed),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      report.spikeWarning!,
+                      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppTheme.downRed),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           _buildInfoRow(
             Icons.compare_arrows,
@@ -1000,6 +1068,22 @@ class _NewsScreenState extends State<NewsScreen> {
             'SMC Technical Synthesis',
             report.smcTechnicalSynthesis,
           ),
+          if (report.institutionalOrderSummary != null && report.institutionalOrderSummary!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _buildInfoRow(
+              Icons.account_tree_outlined,
+              'Institutional Order Concentration',
+              report.institutionalOrderSummary!,
+            ),
+          ],
+          if (report.macroReversalWindow != null && report.macroReversalWindow!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _buildInfoRow(
+              Icons.timelapse_rounded,
+              'Macro Reversal Window',
+              report.macroReversalWindow!,
+            ),
+          ],
           const Divider(height: 20, color: AppTheme.borderSubtle),
           Container(
             padding: const EdgeInsets.all(12),
@@ -1249,6 +1333,11 @@ class _NewsScreenState extends State<NewsScreen> {
                   ),
                 ),
               ],
+              _buildOrderDensityCard(activeAnalysis),
+              _buildManipulationCard(activeAnalysis),
+              _buildReversalTimingCard(activeAnalysis),
+              _buildOrderBlueprintCard(activeAnalysis),
+              _buildSpikeDetectionCard(activeAnalysis),
               const SizedBox(height: 12),
               if (widget.onSelectInstrumentForAnalysis != null)
                 SizedBox(
@@ -1273,6 +1362,505 @@ class _NewsScreenState extends State<NewsScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildOrderDensityCard(PairImpactAnalysisModel active) {
+    final density = active.orderDensity;
+    if (density == null) return const SizedBox.shrink();
+
+    final digits = active.symbol.contains('JPY') ? 3 : 5;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.layers_rounded, size: 14, color: AppTheme.accent),
+                  SizedBox(width: 6),
+                  Text(
+                    'INSTITUTIONAL ORDER DENSITY & LIQUIDITY',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.accent,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  density.orderVolumeConcentration.replaceAll('_', ' '),
+                  style: const TextStyle(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.accent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceSubtle,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppTheme.upGreen.withValues(alpha: 0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'BUY-SIDE (BSL)',
+                        style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppTheme.textMuted),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        density.buySideLiquidity.toStringAsFixed(digits),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.upGreen),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceSubtle,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppTheme.downRed.withValues(alpha: 0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'SELL-SIDE (SSL)',
+                        style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppTheme.textMuted),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        density.sellSideLiquidity.toStringAsFixed(digits),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.downRed),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (density.orderBlockZone.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.account_balance_wallet_outlined, size: 12, color: AppTheme.textMuted),
+                const SizedBox(width: 6),
+                const Text(
+                  'Order Block Zone: ',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted),
+                ),
+                Text(
+                  density.orderBlockZone,
+                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManipulationCard(PairImpactAnalysisModel active) {
+    final manip = active.manipulation;
+    if (manip == null) return const SizedBox.shrink();
+
+    final isHighJudas = manip.judasSwingRisk.toUpperCase() == 'HIGH';
+    final judasColor = isHighJudas ? AppTheme.downRed : (manip.judasSwingRisk.toUpperCase() == 'MEDIUM' ? Colors.amber : AppTheme.upGreen);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: judasColor.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.psychology_alt_rounded, size: 14, color: judasColor),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'INSTITUTIONAL MANIPULATION & TRAP',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: judasColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'JUDAS: ${manip.judasSwingRisk}',
+                  style: TextStyle(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w800,
+                    color: judasColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceSubtle,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: AppTheme.border),
+                ),
+                child: Text(
+                  'Pattern: ${manip.trapType.replaceAll('_', ' ')}',
+                  style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppTheme.textSecondary),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (manip.reversalExpected)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '⚡ REVERSAL HIGH PROBABILITY',
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.accent),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            manip.manipulationThesis,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppTheme.textPrimary,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReversalTimingCard(PairImpactAnalysisModel active) {
+    final timing = active.reversalTiming;
+    if (timing == null) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.schedule_rounded, size: 14, color: AppTheme.accent),
+              SizedBox(width: 6),
+              Text(
+                'DIRECTION REVERSAL TIMING WINDOW',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.accent,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _buildTimingPhaseRow('1. Initial Spike (Sweep)', timing.initialSpikeDuration, Icons.flash_on, AppTheme.downRed),
+          const SizedBox(height: 6),
+          _buildTimingPhaseRow('2. Reversal / Judas Turn', timing.reversalInflectionWindow, Icons.swap_horiz, Colors.amber),
+          const SizedBox(height: 6),
+          _buildTimingPhaseRow('3. Real Expansion Trend', timing.trueTrendExpansionTime, Icons.trending_up, AppTheme.upGreen),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: AppTheme.accent.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.shield_outlined, size: 13, color: AppTheme.accent),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Entry Rule: ${timing.safeEntryTime}',
+                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimingPhaseRow(String phase, String desc, IconData icon, Color color) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 6),
+        SizedBox(
+          width: 140,
+          child: Text(
+            phase,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            desc,
+            style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOrderBlueprintCard(PairImpactAnalysisModel active) {
+    final blueprint = active.orderBlueprint;
+    if (blueprint == null) return const SizedBox.shrink();
+
+    final isBuy = blueprint.action.toUpperCase().contains('BUY');
+    final actionColor = isBuy ? AppTheme.upGreen : AppTheme.downRed;
+    final digits = active.symbol.contains('JPY') ? 3 : 5;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: actionColor.withValues(alpha: 0.4), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.gps_fixed_rounded, size: 14, color: AppTheme.accent),
+                  SizedBox(width: 6),
+                  Text(
+                    'ACTIONABLE ORDER PLACEMENT DIRECTIVE',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.accent,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceSubtle,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'R:R ${blueprint.riskRewardRatio}',
+                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.accent),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: actionColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: actionColor.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(isBuy ? Icons.arrow_upward : Icons.arrow_downward, size: 14, color: actionColor),
+                const SizedBox(width: 6),
+                Text(
+                  blueprint.action.replaceAll('_', ' '),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: actionColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceSubtle,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildBlueprintCol('ENTRY', blueprint.recommendedEntry.toStringAsFixed(digits), AppTheme.textPrimary),
+                _buildBlueprintCol('STOP LOSS', blueprint.stopLoss.toStringAsFixed(digits), AppTheme.downRed),
+                _buildBlueprintCol('TP 1', blueprint.takeProfit1.toStringAsFixed(digits), AppTheme.upGreen),
+                _buildBlueprintCol('TP 2 (RUNNER)', blueprint.takeProfit2.toStringAsFixed(digits), AppTheme.upGreen),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            blueprint.executionRule,
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textSecondary,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBlueprintCol(String label, String val, Color color) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
+        const SizedBox(height: 2),
+        Text(val, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: color)),
+      ],
+    );
+  }
+
+  Widget _buildSpikeDetectionCard(PairImpactAnalysisModel active) {
+    final spike = active.spikeAnalysis;
+    if (spike == null) return const SizedBox.shrink();
+
+    final isBullish = spike.spikeDirection.contains('BULL');
+    final dirColor = isBullish ? AppTheme.upGreen : (spike.spikeDirection.contains('BEAR') ? AppTheme.downRed : AppTheme.textMuted);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.bolt, size: 14, color: Colors.amber),
+                  SizedBox(width: 6),
+                  Text(
+                    'NEWS SPIKE & VOLATILITY STATUS',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.amber,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: dirColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  spike.spikeDirection.replaceAll('_', ' '),
+                  style: TextStyle(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w800,
+                    color: dirColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                'Estimated Displacement: ±${spike.estimatedVolatilityPips.toStringAsFixed(1)} pips',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            spike.spikeStatus,
+            style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+          ),
+        ],
+      ),
     );
   }
 

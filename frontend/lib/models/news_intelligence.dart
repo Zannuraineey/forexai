@@ -139,6 +139,130 @@ class DXYMetricsModel {
   }
 }
 
+class InstitutionalOrderDensityModel {
+  final double buySideLiquidity;
+  final double sellSideLiquidity;
+  final String orderBlockZone;
+  final String orderVolumeConcentration;
+
+  InstitutionalOrderDensityModel({
+    required this.buySideLiquidity,
+    required this.sellSideLiquidity,
+    required this.orderBlockZone,
+    required this.orderVolumeConcentration,
+  });
+
+  factory InstitutionalOrderDensityModel.fromJson(Map<String, dynamic> json) {
+    return InstitutionalOrderDensityModel(
+      buySideLiquidity: (json['buy_side_liquidity'] as num?)?.toDouble() ?? 0.0,
+      sellSideLiquidity: (json['sell_side_liquidity'] as num?)?.toDouble() ?? 0.0,
+      orderBlockZone: json['order_block_zone'] ?? '',
+      orderVolumeConcentration: json['order_volume_concentration'] ?? '',
+    );
+  }
+}
+
+class InstitutionalManipulationModel {
+  final String judasSwingRisk;
+  final String trapType;
+  final String manipulationThesis;
+  final bool reversalExpected;
+
+  InstitutionalManipulationModel({
+    required this.judasSwingRisk,
+    required this.trapType,
+    required this.manipulationThesis,
+    required this.reversalExpected,
+  });
+
+  factory InstitutionalManipulationModel.fromJson(Map<String, dynamic> json) {
+    return InstitutionalManipulationModel(
+      judasSwingRisk: json['judas_swing_risk'] ?? 'MEDIUM',
+      trapType: json['trap_type'] ?? '',
+      manipulationThesis: json['manipulation_thesis'] ?? '',
+      reversalExpected: json['reversal_expected'] ?? true,
+    );
+  }
+}
+
+class DirectionChangeTimingModel {
+  final String initialSpikeDuration;
+  final String reversalInflectionWindow;
+  final String trueTrendExpansionTime;
+  final String safeEntryTime;
+
+  DirectionChangeTimingModel({
+    required this.initialSpikeDuration,
+    required this.reversalInflectionWindow,
+    required this.trueTrendExpansionTime,
+    required this.safeEntryTime,
+  });
+
+  factory DirectionChangeTimingModel.fromJson(Map<String, dynamic> json) {
+    return DirectionChangeTimingModel(
+      initialSpikeDuration: json['initial_spike_duration'] ?? '',
+      reversalInflectionWindow: json['reversal_inflection_window'] ?? '',
+      trueTrendExpansionTime: json['true_trend_expansion_time'] ?? '',
+      safeEntryTime: json['safe_entry_time'] ?? '',
+    );
+  }
+}
+
+class OrderPlacementBlueprintModel {
+  final String action;
+  final double recommendedEntry;
+  final double stopLoss;
+  final double takeProfit1;
+  final double takeProfit2;
+  final String riskRewardRatio;
+  final String executionRule;
+
+  OrderPlacementBlueprintModel({
+    required this.action,
+    required this.recommendedEntry,
+    required this.stopLoss,
+    required this.takeProfit1,
+    required this.takeProfit2,
+    required this.riskRewardRatio,
+    required this.executionRule,
+  });
+
+  factory OrderPlacementBlueprintModel.fromJson(Map<String, dynamic> json) {
+    return OrderPlacementBlueprintModel(
+      action: json['action'] ?? '',
+      recommendedEntry: (json['recommended_entry'] as num?)?.toDouble() ?? 0.0,
+      stopLoss: (json['stop_loss'] as num?)?.toDouble() ?? 0.0,
+      takeProfit1: (json['take_profit_1'] as num?)?.toDouble() ?? 0.0,
+      takeProfit2: (json['take_profit_2'] as num?)?.toDouble() ?? 0.0,
+      riskRewardRatio: json['risk_reward_ratio'] ?? '1:3.0',
+      executionRule: json['execution_rule'] ?? '',
+    );
+  }
+}
+
+class NewsSpikeDetectionModel {
+  final bool isSpikeActive;
+  final String spikeDirection;
+  final double estimatedVolatilityPips;
+  final String spikeStatus;
+
+  NewsSpikeDetectionModel({
+    required this.isSpikeActive,
+    required this.spikeDirection,
+    required this.estimatedVolatilityPips,
+    required this.spikeStatus,
+  });
+
+  factory NewsSpikeDetectionModel.fromJson(Map<String, dynamic> json) {
+    return NewsSpikeDetectionModel(
+      isSpikeActive: json['is_spike_active'] ?? false,
+      spikeDirection: json['spike_direction'] ?? 'STABLE',
+      estimatedVolatilityPips: (json['estimated_volatility_pips'] as num?)?.toDouble() ?? 0.0,
+      spikeStatus: json['spike_status'] ?? '',
+    );
+  }
+}
+
 class PairImpactAnalysisModel {
   final String symbol;
   final String directionalBias;
@@ -147,6 +271,11 @@ class PairImpactAnalysisModel {
   final String smcConfluence;
   final Map<String, dynamic> keyLevels;
   final String tradeThesis;
+  final InstitutionalOrderDensityModel? orderDensity;
+  final InstitutionalManipulationModel? manipulation;
+  final DirectionChangeTimingModel? reversalTiming;
+  final OrderPlacementBlueprintModel? orderBlueprint;
+  final NewsSpikeDetectionModel? spikeAnalysis;
 
   PairImpactAnalysisModel({
     required this.symbol,
@@ -156,8 +285,14 @@ class PairImpactAnalysisModel {
     required this.smcConfluence,
     required this.keyLevels,
     required this.tradeThesis,
+    this.orderDensity,
+    this.manipulation,
+    this.reversalTiming,
+    this.orderBlueprint,
+    this.spikeAnalysis,
   });
 
+  // ignore: non_constant_identifier_names
   String get directional_bias => directionalBias;
 
   factory PairImpactAnalysisModel.fromJson(Map<String, dynamic> json) {
@@ -169,6 +304,11 @@ class PairImpactAnalysisModel {
       smcConfluence: json['smc_confluence'] ?? '',
       keyLevels: (json['key_levels'] as Map<String, dynamic>?) ?? {},
       tradeThesis: json['trade_thesis'] ?? '',
+      orderDensity: json['order_density'] != null ? InstitutionalOrderDensityModel.fromJson(json['order_density']) : null,
+      manipulation: json['manipulation'] != null ? InstitutionalManipulationModel.fromJson(json['manipulation']) : null,
+      reversalTiming: json['reversal_timing'] != null ? DirectionChangeTimingModel.fromJson(json['reversal_timing']) : null,
+      orderBlueprint: json['order_blueprint'] != null ? OrderPlacementBlueprintModel.fromJson(json['order_blueprint']) : null,
+      spikeAnalysis: json['spike_analysis'] != null ? NewsSpikeDetectionModel.fromJson(json['spike_analysis']) : null,
     );
   }
 }
@@ -185,6 +325,9 @@ class NewsIntelligenceReportModel {
   final List<PairImpactAnalysisModel> pairAnalyses;
   final String actionableConclusion;
   final String aiEngineUsed;
+  final String? institutionalOrderSummary;
+  final String? macroReversalWindow;
+  final String? spikeWarning;
 
   NewsIntelligenceReportModel({
     required this.id,
@@ -198,6 +341,9 @@ class NewsIntelligenceReportModel {
     required this.pairAnalyses,
     required this.actionableConclusion,
     required this.aiEngineUsed,
+    this.institutionalOrderSummary,
+    this.macroReversalWindow,
+    this.spikeWarning,
   });
 
   factory NewsIntelligenceReportModel.fromJson(Map<String, dynamic> json) {
@@ -217,6 +363,9 @@ class NewsIntelligenceReportModel {
       pairAnalyses: pairsList,
       actionableConclusion: json['actionable_conclusion'] ?? '',
       aiEngineUsed: json['ai_engine_used'] ?? 'QUANT_MACRO_SYNTHESIS',
+      institutionalOrderSummary: json['institutional_order_summary'],
+      macroReversalWindow: json['macro_reversal_window'],
+      spikeWarning: json['spike_warning'],
     );
   }
 }

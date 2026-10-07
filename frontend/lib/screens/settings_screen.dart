@@ -689,14 +689,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-            const SizedBox(height: 2),
-            Text(subtitle, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              const SizedBox(height: 2),
+              Text(subtitle, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+            ],
+          ),
         ),
+        const SizedBox(width: 8),
         Switch(
           value: val,
           activeThumbColor: AppTheme.accent,
@@ -718,8 +721,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               const Text('Active Intelligence Model', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
               Container(
@@ -740,6 +746,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             value: _selectedAiProvider,
             dropdownColor: AppTheme.surface,
             decoration: InputDecoration(
@@ -752,9 +759,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppTheme.border)),
             ),
             items: const [
-              DropdownMenuItem(value: 'QUANT_MACRO', child: Text('Autonomous Quant Engine (Live SMC & Math)', style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
-              DropdownMenuItem(value: 'GEMINI_15_FLASH', child: Text('Google Gemini 1.5/2.5 Flash', style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
-              DropdownMenuItem(value: 'OPENAI_GPT4O', child: Text('OpenAI GPT-4o / GPT-4o-Mini', style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
+              DropdownMenuItem(value: 'QUANT_MACRO', child: Text('Quant Engine (Live SMC & Math)', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
+              DropdownMenuItem(value: 'GEMINI_15_FLASH', child: Text('Google Gemini 1.5/2.5 Flash', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
+              DropdownMenuItem(value: 'OPENAI_GPT4O', child: Text('OpenAI GPT-4o / Mini', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
             ],
             onChanged: (val) {
               if (val != null) setState(() => _selectedAiProvider = val);
