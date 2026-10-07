@@ -1382,15 +1382,19 @@ class _NewsScreenState extends State<NewsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               const Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.layers_rounded, size: 14, color: AppTheme.accent),
                   SizedBox(width: 6),
                   Text(
-                    'INSTITUTIONAL ORDER DENSITY & LIQUIDITY',
+                    'ORDER DENSITY & LIQUIDITY',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
@@ -1481,9 +1485,12 @@ class _NewsScreenState extends State<NewsScreen> {
                   'Order Block Zone: ',
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.textMuted),
                 ),
-                Text(
-                  density.orderBlockZone,
-                  style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                Expanded(
+                  child: Text(
+                    density.orderBlockZone,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                  ),
                 ),
               ],
             ),
@@ -1511,15 +1518,19 @@ class _NewsScreenState extends State<NewsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.psychology_alt_rounded, size: 14, color: judasColor),
                   const SizedBox(width: 6),
                   const Text(
-                    'INSTITUTIONAL MANIPULATION & TRAP',
+                    'MANIPULATION & TRAP',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
@@ -1547,7 +1558,9 @@ class _NewsScreenState extends State<NewsScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1561,7 +1574,6 @@ class _NewsScreenState extends State<NewsScreen> {
                   style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: AppTheme.textSecondary),
                 ),
               ),
-              const SizedBox(width: 8),
               if (manip.reversalExpected)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1622,11 +1634,9 @@ class _NewsScreenState extends State<NewsScreen> {
           ),
           const SizedBox(height: 10),
           _buildTimingPhaseRow('1. Initial Spike (Sweep)', timing.initialSpikeDuration, Icons.flash_on, AppTheme.downRed),
-          const SizedBox(height: 6),
           _buildTimingPhaseRow('2. Reversal / Judas Turn', timing.reversalInflectionWindow, Icons.swap_horiz, Colors.amber),
-          const SizedBox(height: 6),
           _buildTimingPhaseRow('3. Real Expansion Trend', timing.trueTrendExpansionTime, Icons.trending_up, AppTheme.upGreen),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -1654,25 +1664,29 @@ class _NewsScreenState extends State<NewsScreen> {
   }
 
   Widget _buildTimingPhaseRow(String phase, String desc, IconData icon, Color color) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 12, color: color),
-        const SizedBox(width: 6),
-        SizedBox(
-          width: 140,
-          child: Text(
-            phase,
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                children: [
+                  TextSpan(
+                    text: '$phase: ',
+                    style: TextStyle(fontWeight: FontWeight.w700, color: color),
+                  ),
+                  TextSpan(text: desc),
+                ],
+              ),
+            ),
           ),
-        ),
-        Expanded(
-          child: Text(
-            desc,
-            style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1695,15 +1709,19 @@ class _NewsScreenState extends State<NewsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               const Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.gps_fixed_rounded, size: 14, color: AppTheme.accent),
                   SizedBox(width: 6),
                   Text(
-                    'ACTIONABLE ORDER PLACEMENT DIRECTIVE',
+                    'ACTIONABLE ORDER DIRECTIVE',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
@@ -1757,14 +1775,19 @@ class _NewsScreenState extends State<NewsScreen> {
               color: AppTheme.surfaceSubtle,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildBlueprintCol('ENTRY', blueprint.recommendedEntry.toStringAsFixed(digits), AppTheme.textPrimary),
-                _buildBlueprintCol('STOP LOSS', blueprint.stopLoss.toStringAsFixed(digits), AppTheme.downRed),
-                _buildBlueprintCol('TP 1', blueprint.takeProfit1.toStringAsFixed(digits), AppTheme.upGreen),
-                _buildBlueprintCol('TP 2 (RUNNER)', blueprint.takeProfit2.toStringAsFixed(digits), AppTheme.upGreen),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildBlueprintCol('ENTRY', blueprint.recommendedEntry.toStringAsFixed(digits), AppTheme.textPrimary),
+                  const SizedBox(width: 14),
+                  _buildBlueprintCol('STOP LOSS', blueprint.stopLoss.toStringAsFixed(digits), AppTheme.downRed),
+                  const SizedBox(width: 14),
+                  _buildBlueprintCol('TP 1', blueprint.takeProfit1.toStringAsFixed(digits), AppTheme.upGreen),
+                  const SizedBox(width: 14),
+                  _buildBlueprintCol('TP 2 (RUNNER)', blueprint.takeProfit2.toStringAsFixed(digits), AppTheme.upGreen),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -1810,15 +1833,19 @@ class _NewsScreenState extends State<NewsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               const Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.bolt, size: 14, color: Colors.amber),
                   SizedBox(width: 6),
                   Text(
-                    'NEWS SPIKE & VOLATILITY STATUS',
+                    'NEWS SPIKE & VOLATILITY',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
@@ -1846,13 +1873,9 @@ class _NewsScreenState extends State<NewsScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(
-                'Estimated Displacement: ±${spike.estimatedVolatilityPips.toStringAsFixed(1)} pips',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
-              ),
-            ],
+          Text(
+            'Estimated Displacement: ±${spike.estimatedVolatilityPips.toStringAsFixed(1)} pips',
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
           ),
           const SizedBox(height: 4),
           Text(
