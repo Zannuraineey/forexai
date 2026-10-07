@@ -411,6 +411,235 @@ class NotificationService:
         logger.info(f"Dispatched UT Bot notification {record.id} for {sym} ({sent_count} live FCM delivered).")
         return NotificationRead.model_validate(record)
 
+    async def dispatch_economic_event_alert(
+        self,
+        event: Any,  # EconomicEvent
+        minutes_until: int,
+        user_id: int = 1,
+    ) -> Optional[NotificationRead]:
+        """
+        Dispatches high-priority pre-release FCM notification (5-10 minutes prior to release)
+        for high and medium impact economic events.
+        """
+        # Deduplication: check if this event was already alerted
+        cooldown_threshold = datetime.now(timezone.utc) - timedelta(hours=3)
+        dedup_stmt = (
+            select(Notification)
+            .where(
+                Notification.user_id == user_id,
+                Notification.created_at >= cooldown_threshold,
+            )
+            .order_by(desc(Notification.created_at))
+        )
+        recent_res = await self.db.execute(dedup_stmt)
+        for notif in recent_res.scalars().all():
+            p = notif.payload or {}
+            if p.get("type") == "ECONOMIC_EVENT_UPCOMING" and str(p.get("event_id")) == str(event.id):
+                logger.info(f"Economic event notification suppressed: {event.id} already alerted.")
+                return None
+
+        # Fetch registered devices
+        dev_stmt = select(Device).where(Device.user_id == user_id)
+        dev_res = await self.db.execute(dev_stmt)
+        devices = dev_res.scalars().all()
+
+        impact_icon = "🚨" if getattr(event, "impact", "") == "HIGH" else "⚡"
+        title = f"{impact_icon} [{getattr(event, 'impact', 'HIGH')}] {getattr(event, 'currency', 'USD')}: {getattr(event, 'title', 'Economic Event')} in {minutes_until}m"
+
+        fc_str = getattr(event, "raw_forecast", None) or (f"{getattr(event, 'forecast', '')}{getattr(event, 'unit', '')}" if getattr(event, "forecast", None) is not None else "N/A")
+        prev_str = getattr(event, "raw_previous", None) or (f"{getattr(event, 'previous', '')}{getattr(event, 'unit', '')}" if getattr(event, "previous", None) is not None else "N/A")
+
+        bull_trig = getattr(event, "bullish_trigger", None)
+        consensus = getattr(event, "consensus_expectation", None)
+        if bull_trig:
+            body = f"Forecast: {fc_str} vs Prior: {prev_str}. {bull_trig}"
+        elif consensus:
+            body = f"Forecast: {fc_str} vs Prior: {prev_str}. {consensus}"
+        else:
+            body = f"High volatility event approaching in {minutes_until} minutes. Prepare dealing range setups."
+
+        payload = {
+            "type": "ECONOMIC_EVENT_UPCOMING",
+            "screen": "news",
+            "event_id": str(getattr(event, "id", "")),
+            "currency": str(getattr(event, "currency", "USD")),
+            "impact": str(getattr(event, "impact", "HIGH")),
+            "title": str(getattr(event, "title", "")),
+            "minutes_until": str(minutes_until),
+            "forecast": str(fc_str),
+            "previous": str(prev_str),
+            "bullish_trigger": str(getattr(event, "bullish_trigger", "") or ""),
+            "bearish_trigger": str(getattr(event, "bearish_trigger", "") or ""),
+            "click_action": "FLUTTER_NOTIFICATION_CLICK",
+        }
+
+        sent_count = 0
+        fb_app = _get_firebase_app()
+        if fb_app and devices:
+            android_config = messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    sound="default",
+                    priority="max",
+                    default_vibrate_timings=True,
+                    channel_id="forex_ai_alerts",
+                    icon="ic_stat_notification",
+                    color="#EF4444" if getattr(event, "impact", "") == "HIGH" else "#F59E0B",
+                ),
+            )
+            for dev in devices:
+                try:
+                    msg = messaging.Message(
+                        notification=messaging.Notification(title=title, body=body),
+                        data={k: str(v) for k, v in payload.items()},
+                        android=android_config,
+                        token=dev.fcm_token,
+                    )
+                    messaging.send(msg)
+                    sent_count += 1
+                    logger.info(f"FCM economic event push delivered for {getattr(event, 'title', '')} to {dev.fcm_token[:12]}...")
+                except Exception as e:
+                    logger.warning(f"Failed to deliver FCM economic event push to device {dev.id}: {e}")
+
+            # Also broadcast to topic "economic_events"
+            try:
+                topic_msg = messaging.Message(
+                    notification=messaging.Notification(title=title, body=body),
+                    data={k: str(v) for k, v in payload.items()},
+                    android=android_config,
+                    topic="economic_events",
+                )
+                messaging.send(topic_msg)
+                logger.info("Delivered FCM event broadcast to topic 'economic_events'")
+            except Exception as e:
+                logger.debug(f"Topic broadcast notice: {e}")
+
+        now = datetime.now(timezone.utc)
+        record = Notification(
+            analysis_id=None,
+            user_id=user_id,
+            channel="fcm",
+            title=title,
+            body=body,
+            payload=payload,
+            sent_at=now if (devices and sent_count > 0) else None,
+            status="SENT" if (devices and sent_count > 0) else ("SENT_SIMULATED" if devices else "PENDING_NO_DEVICES"),
+            created_at=now,
+        )
+        self.db.add(record)
+        await self.db.commit()
+        await self.db.refresh(record)
+        logger.info(f"Dispatched economic event pre-release notification {record.id} for {getattr(event, 'title', '')}.")
+        return NotificationRead.model_validate(record)
+
+    async def dispatch_daily_events_briefing(
+        self,
+        events: List[Any],  # List[EconomicEvent]
+        user_id: int = 1,
+    ) -> Optional[NotificationRead]:
+        """
+        Dispatches daily morning economic schedule briefing to user mobile devices.
+        """
+        if not events:
+            return None
+
+        # Check deduplication for today
+        now = datetime.now(timezone.utc)
+        start_of_day = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        dedup_stmt = (
+            select(Notification)
+            .where(
+                Notification.user_id == user_id,
+                Notification.created_at >= start_of_day,
+            )
+        )
+        recent_res = await self.db.execute(dedup_stmt)
+        for notif in recent_res.scalars().all():
+            p = notif.payload or {}
+            if p.get("type") == "ECONOMIC_EVENT_DAILY_BRIEFING":
+                logger.info("Daily economic briefing already sent today.")
+                return None
+
+        # Fetch registered devices
+        dev_stmt = select(Device).where(Device.user_id == user_id)
+        dev_res = await self.db.execute(dev_stmt)
+        devices = dev_res.scalars().all()
+
+        high_count = sum(1 for e in events if getattr(e, "impact", "") == "HIGH")
+        title = f"📅 Today's Macro Events Radar ({len(events)} Releases, {high_count} High Impact)"
+
+        # Format top 3 key events
+        event_snippets = []
+        for e in events[:3]:
+            dt = getattr(e, "event_time_utc", None)
+            time_str = dt.strftime("%H:%M UTC") if dt else ""
+            event_snippets.append(f"{getattr(e, 'currency', 'USD')} {getattr(e, 'title', '')} ({time_str})")
+        body = "Key today: " + "; ".join(event_snippets) + ". Review scenario triggers before market open."
+
+        payload = {
+            "type": "ECONOMIC_EVENT_DAILY_BRIEFING",
+            "screen": "news",
+            "event_count": str(len(events)),
+            "high_count": str(high_count),
+            "click_action": "FLUTTER_NOTIFICATION_CLICK",
+        }
+
+        sent_count = 0
+        fb_app = _get_firebase_app()
+        if fb_app and devices:
+            android_config = messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    sound="default",
+                    priority="max",
+                    default_vibrate_timings=True,
+                    channel_id="forex_ai_alerts",
+                    icon="ic_stat_notification",
+                    color="#3B82F6",
+                ),
+            )
+            for dev in devices:
+                try:
+                    msg = messaging.Message(
+                        notification=messaging.Notification(title=title, body=body),
+                        data={k: str(v) for k, v in payload.items()},
+                        android=android_config,
+                        token=dev.fcm_token,
+                    )
+                    messaging.send(msg)
+                    sent_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to deliver FCM daily briefing: {e}")
+
+            try:
+                topic_msg = messaging.Message(
+                    notification=messaging.Notification(title=title, body=body),
+                    data={k: str(v) for k, v in payload.items()},
+                    android=android_config,
+                    topic="economic_events",
+                )
+                messaging.send(topic_msg)
+            except Exception as e:
+                logger.debug(f"Topic broadcast notice: {e}")
+
+        now = datetime.now(timezone.utc)
+        record = Notification(
+            analysis_id=None,
+            user_id=user_id,
+            channel="fcm",
+            title=title,
+            body=body,
+            payload=payload,
+            sent_at=now if (devices and sent_count > 0) else None,
+            status="SENT" if (devices and sent_count > 0) else ("SENT_SIMULATED" if devices else "PENDING_NO_DEVICES"),
+            created_at=now,
+        )
+        self.db.add(record)
+        await self.db.commit()
+        await self.db.refresh(record)
+        logger.info(f"Dispatched daily economic briefing notification {record.id}.")
+        return NotificationRead.model_validate(record)
+
     async def get_notifications(
         self, user_id: int = 1, limit: int = 50, offset: int = 0
     ) -> List[NotificationRead]:

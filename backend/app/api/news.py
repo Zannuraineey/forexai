@@ -88,3 +88,69 @@ async def ask_ai_macro_analyst(
     """
     engine = NewsIntelligenceEngine(db)
     return await engine.answer_ai_query(request)
+
+@router.post("/notifications/check")
+async def trigger_event_notifications_check():
+    """
+    Manually triggers evaluation of 10-5m pre-release countdowns and daily event briefing.
+    """
+    from app.services.notifications import get_economic_event_worker
+    worker = get_economic_event_worker()
+    return await worker.check_and_dispatch_once()
+
+@router.post("/notifications/test-alert")
+async def trigger_test_event_alert(
+    event_id: Optional[str] = Query(None, description="Optional target event ID to alert"),
+    minutes_until: int = Query(10, description="Simulated minutes remaining until release"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Dispatches an instant test FCM notification for a high/medium impact economic event.
+    """
+    from app.services.notifications import NotificationService
+    cal_svc = EconomicCalendarService()
+    event = None
+    if event_id:
+        event = cal_svc.get_event_by_id(event_id)
+    if not event:
+        events = cal_svc.get_all_events()
+        # Find first high impact or medium impact event
+        for e in events:
+            if e.impact in ["HIGH", "MEDIUM"]:
+                event = e
+                break
+        if not event and events:
+            event = events[0]
+
+    if not event:
+        return {"error": "No events available to alert"}
+
+    notif_svc = NotificationService(db)
+    res = await notif_svc.dispatch_economic_event_alert(event=event, minutes_until=minutes_until)
+    return {
+        "status": "SENT" if res else "SUPPRESSED_OR_ERROR",
+        "event_id": event.id,
+        "title": event.title,
+        "currency": event.currency,
+        "impact": event.impact,
+        "notification": res.model_dump() if res else None,
+    }
+
+@router.post("/notifications/test-daily-briefing")
+async def trigger_test_daily_briefing(db: AsyncSession = Depends(get_db)):
+    """
+    Dispatches an instant test FCM daily economic events briefing.
+    """
+    from app.services.notifications import NotificationService
+    cal_svc = EconomicCalendarService()
+    events = cal_svc.get_all_events()
+    high_med = [e for e in events if e.impact in ["HIGH", "MEDIUM"]]
+    selected = high_med[:5] if high_med else events[:5]
+
+    notif_svc = NotificationService(db)
+    res = await notif_svc.dispatch_daily_events_briefing(events=selected)
+    return {
+        "status": "SENT" if res else "SUPPRESSED_OR_ERROR",
+        "events_count": len(selected),
+        "notification": res.model_dump() if res else None,
+    }

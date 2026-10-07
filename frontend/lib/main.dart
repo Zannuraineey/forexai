@@ -29,10 +29,18 @@ void main() async {
   _initFCM();
 }
 
-final GlobalKey<_MainNavigationShellState> shellKey = GlobalKey<_MainNavigationShellState>();
+final GlobalKey<MainNavigationShellState> shellKey = GlobalKey<MainNavigationShellState>();
 
 void _handleNotificationOpen(RemoteMessage? message) {
   if (message == null) return;
+  final type = message.data['type']?.toString();
+  final screen = message.data['screen']?.toString();
+  if (type == 'ECONOMIC_EVENT_UPCOMING' || type == 'ECONOMIC_EVENT_DAILY_BRIEFING' || screen == 'news') {
+    final eventId = message.data['event_id']?.toString();
+    shellKey.currentState?.navigateToNews(eventId);
+    return;
+  }
+
   final symbol = message.data['symbol']?.toString();
   if (symbol != null && symbol.isNotEmpty) {
     shellKey.currentState?.navigateToAnalysis(symbol);
@@ -43,8 +51,12 @@ void _handleNotificationOpen(RemoteMessage? message) {
   for (final s in ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'USDCAD', 'XAGUSD']) {
     if (text.contains(s)) {
       shellKey.currentState?.navigateToAnalysis(s);
-      break;
+      return;
     }
+  }
+  if (text.contains('EVENT') || text.contains('CPI') || text.contains('MACRO') || text.contains('BRIEFING')) {
+    shellKey.currentState?.navigateToNews();
+    return;
   }
 }
 
@@ -73,6 +85,13 @@ Future<void> _initFCM() async {
       );
     }
 
+    try {
+      await messaging.subscribeToTopic('economic_events');
+      debugPrint('Subscribed to topic: economic_events');
+    } catch (e) {
+      debugPrint('Topic subscription notice: $e');
+    }
+
     messaging.onTokenRefresh.listen((newToken) {
       ApiService.registerDevice(
         fcmToken: newToken,
@@ -98,18 +117,25 @@ Future<void> _initFCM() async {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('Foreground FCM received: ${message.notification?.title}');
       final ctx = navigatorKey.currentContext;
-      if (ctx == null) return;
+      if (ctx == null || !ctx.mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(ctx);
+      if (messenger == null) return;
 
       final title = message.notification?.title ?? message.data['title'] ?? 'AI Market Alert';
       final body = message.notification?.body ?? message.data['body'] ?? '';
       final symbol = message.data['symbol']?.toString();
       final state = message.data['state']?.toString() ?? 'ALERT';
+      final type = message.data['type']?.toString();
+      final isEconomicEvent = type == 'ECONOMIC_EVENT_UPCOMING' || type == 'ECONOMIC_EVENT_DAILY_BRIEFING';
+      final isHighEvent = message.data['impact'] == 'HIGH';
 
       final isBullish = state.contains('VALID') || title.contains('VALID');
-      final accentColor = isBullish ? const Color(0xFF10B981) : const Color(0xFFF59E0B);
+      final Color accentColor = isEconomicEvent
+          ? (isHighEvent ? const Color(0xFFEF4444) : const Color(0xFF3B82F6))
+          : (isBullish ? const Color(0xFF10B981) : const Color(0xFFF59E0B));
 
-      ScaffoldMessenger.of(ctx).hideCurrentSnackBar();
-      ScaffoldMessenger.of(ctx).showSnackBar(
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
           backgroundColor: Colors.transparent,
@@ -224,7 +250,9 @@ Future<void> _initFCM() async {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              symbol != null ? 'VIEW $symbol' : 'INSPECT SETUP',
+                              isEconomicEvent
+                                  ? (type == 'ECONOMIC_EVENT_DAILY_BRIEFING' ? 'VIEW CALENDAR' : 'VIEW EVENT')
+                                  : (symbol != null ? 'VIEW $symbol' : 'INSPECT SETUP'),
                               style: TextStyle(
                                 color: accentColor,
                                 fontSize: 11,
@@ -269,16 +297,23 @@ class MainNavigationShell extends StatefulWidget {
   const MainNavigationShell({super.key});
 
   @override
-  State<MainNavigationShell> createState() => _MainNavigationShellState();
+  State<MainNavigationShell> createState() => MainNavigationShellState();
 }
 
-class _MainNavigationShellState extends State<MainNavigationShell> {
+class MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
   String _selectedSymbolForAnalysis = 'EURUSD';
   final Set<int> _loadedTabs = {0};
 
   void navigateToAnalysis(String symbol) {
     _onSelectInstrumentForAnalysis(symbol);
+  }
+
+  void navigateToNews([String? eventId]) {
+    setState(() {
+      _loadedTabs.add(3);
+      _currentIndex = 3;
+    });
   }
 
   void _onSelectInstrumentForAnalysis(String symbol) {

@@ -8,6 +8,7 @@ from app.core.database import init_db
 from app.api import api_router
 from app.services.market_data import get_market_data_provider, IngestionWorker
 from app.services.ai import get_session_scanner
+from app.services.notifications import get_economic_event_worker
 
 ingestion_worker: IngestionWorker | None = None
 
@@ -31,10 +32,16 @@ async def lifespan(app: FastAPI):
         scanner = get_session_scanner()
         await scanner.start()
 
+        # Launch automated economic news & pre-release event notification worker
+        event_worker = get_economic_event_worker()
+        await event_worker.start()
+
     yield
 
     # Shutdown
     logger.info("Initiating graceful shutdown...")
+    event_worker = get_economic_event_worker()
+    await event_worker.stop()
     scanner = get_session_scanner()
     await scanner.stop()
     if ingestion_worker:
