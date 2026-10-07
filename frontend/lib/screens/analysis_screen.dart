@@ -660,6 +660,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     final summary = data['summary']?.toString() ?? '';
     final mtf = data['mtf'] as Map<String, dynamic>? ?? {};
     final conditions = data['conditions'] as List<dynamic>? ?? [];
+    final sessionDirective = data['session_directive']?.toString() ?? '24/7 Algorithmic Market — Traditional bank sessions do not apply.';
+    final validityStr = data['validity_window_str']?.toString() ?? '3 Minutes';
+    final executionRule = data['execution_rule']?.toString() ?? '';
+    final tp1 = (data['take_profit_1'] as num?)?.toDouble() ?? 0.0;
+    final tp2 = (data['take_profit_2'] as num?)?.toDouble() ?? 0.0;
+    final maxSlippage = (data['max_slippage_points'] as num?)?.toDouble() ?? 0.0;
 
     final isBuy = signal == 'BUY' || signal == 'BULLISH_HOLD';
     final isSell = signal == 'SELL' || signal == 'BEARISH_HOLD';
@@ -741,7 +747,28 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.all_inclusive_rounded, size: 13, color: Color(0xFF38BDF8)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    sessionDirective,
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Color(0xFF94A3B8)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
 
           Container(
             width: double.infinity,
@@ -771,6 +798,58 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               ],
             ),
           ),
+          if (executionRule.isNotEmpty) ...[
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.background,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: signalColor.withValues(alpha: 0.35)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.timer_outlined, size: 13, color: signalColor),
+                          const SizedBox(width: 5),
+                          Text(
+                            'ACTION WINDOW: NEXT $validityStr'.toUpperCase(),
+                            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: signalColor),
+                          ),
+                        ],
+                      ),
+                      if (maxSlippage > 0)
+                        Text(
+                          'Max Slip: ±${maxSlippage.toStringAsFixed(3)}',
+                          style: const TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    executionRule,
+                    style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppTheme.textPrimary, height: 1.35),
+                  ),
+                  if (tp1 > 0 || tp2 > 0) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        if (tp1 > 0)
+                          Text('TP1: ${tp1.toStringAsFixed(4)}  ', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
+                        if (tp2 > 0)
+                          Text('TP2: ${tp2.toStringAsFixed(4)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
 
           Row(

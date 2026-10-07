@@ -326,13 +326,22 @@ class NotificationService:
         trail = ut_result.get("trailing_stop", 0.0)
         ema = ut_result.get("ema_200", 0.0)
         rsi = ut_result.get("rsi", 50.0)
+        valid_str = ut_result.get("validity_window_str", "3 Minutes")
+        rule_str = ut_result.get("execution_rule", "")
+        tp1 = ut_result.get("take_profit_1", 0.0)
+        tp2 = ut_result.get("take_profit_2", 0.0)
+        max_slip = ut_result.get("max_slippage_points", 0.0)
+        market_reg = ut_result.get("market_regime", "CONTINUOUS_24_7_SYNTHETIC")
+
+        is_24_7 = "SYNTHETIC" in market_reg or "CRYPTO" in market_reg
+        prefix = "⚡ [24/7 INSTANT]" if is_24_7 else "⚡ [UT BOT]"
 
         if signal == "BUY":
-            title = f"⚡ UT BOT BUY: {sym} ({timeframe})"
-            body = f"Price ({price:.4f}) crossed above trailing stop ({trail:.4f}). EMA200: {ema:.4f}, RSI: {rsi:.1f}."
+            title = f"{prefix} BUY: {sym} ({timeframe})"
+            body = f"Entry: {price:.4f} | SL: {trail:.4f} | TP1: {tp1:.4f} | Valid: Next {valid_str}. Tap to execute."
         else:
-            title = f"⚡ UT BOT SELL: {sym} ({timeframe})"
-            body = f"Price ({price:.4f}) crossed below trailing stop ({trail:.4f}). EMA200: {ema:.4f}, RSI: {rsi:.1f}."
+            title = f"{prefix} SELL: {sym} ({timeframe})"
+            body = f"Entry: {price:.4f} | SL: {trail:.4f} | TP1: {tp1:.4f} | Valid: Next {valid_str}. Tap to execute."
 
         payload = {
             "strategy": "ut_bot",
@@ -341,6 +350,12 @@ class NotificationService:
             "signal": signal,
             "price": str(price),
             "trailing_stop": str(trail),
+            "take_profit_1": str(tp1),
+            "take_profit_2": str(tp2),
+            "max_slippage_points": str(max_slip),
+            "execution_rule": rule_str,
+            "validity_window_str": valid_str,
+            "market_regime": market_reg,
             "ema_200": str(ema),
             "rsi": str(rsi),
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),

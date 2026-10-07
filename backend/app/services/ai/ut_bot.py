@@ -92,9 +92,13 @@ class UTBotEngine:
         rsi_period: int = 14,
         rsi_buy_level: float = 45.0,
         rsi_sell_level: float = 55.0,
+        symbol: str = "R_75",
+        timeframe: str = "15m",
     ) -> Dict[str, Any]:
         """
         Evaluates candles through UT Bot trailing stop with anti-repainting closed-bar logic.
+        Adds 24/7 continuous market regime detection, execution validity window,
+        slippage thresholds, and actionable trade blueprint.
         """
         if not candles or len(candles) < 5:
             return {
@@ -107,6 +111,14 @@ class UTBotEngine:
                 "rsi": 50.0,
                 "trend": "NEUTRAL",
                 "conditions": [],
+                "market_regime": "CONTINUOUS_24_7_SYNTHETIC",
+                "session_directive": "24/7 Algorithmic market — Traditional sessions do not apply.",
+                "validity_window_seconds": 300,
+                "validity_window_str": "5 Minutes",
+                "execution_rule": "Insufficient data to formulate execution rule.",
+                "take_profit_1": 0.0,
+                "take_profit_2": 0.0,
+                "max_slippage_points": 0.0,
             }
 
         closes = [float(c.close) for c in candles]
@@ -138,7 +150,6 @@ class UTBotEngine:
             trail_series.append(trail)
 
         # Detect crossover on last 2 bars (Confirmed Bar Anti-Repaint)
-        # Using index -1 (current closed bar) and -2 (previous closed bar)
         curr_price = closes[-1]
         prev_price = closes[-2]
         curr_trail = trail_series[-1]
@@ -205,6 +216,78 @@ class UTBotEngine:
             
             summary = "⏸️ UT BOT FILTERING: " + (", ".join(reasons) if reasons else "Awaiting confirmed directional breakout.")
 
+        # Market regime & 24/7 session logic
+        sym_str = symbol.upper() if symbol else ""
+        is_synthetic = any(k in sym_str for k in ["R_", "VOLATILITY", "1HZ", "BOOM", "CRASH", "STEP"])
+        is_crypto = any(k in sym_str for k in ["BTC", "ETH", "SOL"])
+
+        if is_synthetic:
+            market_regime = "CONTINUOUS_24_7_SYNTHETIC"
+            session_directive = "24/7 Algorithmic Market — Traditional bank sessions (London, New York, Asian) DO NOT APPLY. Valid anytime 24/7."
+        elif is_crypto:
+            market_regime = "CONTINUOUS_24_7_CRYPTO"
+            session_directive = "24/7 Decentralized Market — Active 24/7 independent of bank sessions."
+        else:
+            market_regime = "SESSIONAL_FOREX"
+            session_directive = "Forex Market — Optimal institutional liquidity during London/New York overlap."
+
+        # Risk metrics & Execution Validity Window
+        last_atr = atr_vals[-1] if atr_vals else (curr_price * 0.005)
+        max_slippage_points = round(last_atr * 0.35, 4)
+
+        tf_lower = timeframe.lower() if timeframe else "15m"
+        if "1m" in tf_lower:
+            validity_window_seconds = 45
+            validity_window_str = "45 Seconds"
+        elif "5m" in tf_lower:
+            validity_window_seconds = 180
+            validity_window_str = "3 Minutes"
+        elif "15m" in tf_lower:
+            validity_window_seconds = 480
+            validity_window_str = "8 Minutes"
+        elif "1h" in tf_lower:
+            validity_window_seconds = 1200
+            validity_window_str = "20 Minutes"
+        else:
+            validity_window_seconds = 300
+            validity_window_str = "5 Minutes"
+
+        if signal in ["BUY", "BULLISH_HOLD"]:
+            risk_dist = max(abs(curr_price - curr_trail), last_atr)
+            tp1 = round(curr_price + (1.5 * risk_dist), 5)
+            tp2 = round(curr_price + (2.5 * risk_dist), 5)
+            entry_max = round(curr_price + max_slippage_points, 5)
+            if signal == "BUY":
+                execution_rule = (
+                    f"Immediate Execution: Enter BUY at current price ({curr_price:.4f}) or limit on retest of Trailing Stop ({curr_trail:.4f}). "
+                    f"Max buy threshold is {entry_max:.4f}. DO NOT chase if price exceeds {entry_max:.4f}."
+                )
+            else:
+                execution_rule = (
+                    f"Bullish continuation active. If already long, hold with SL at {curr_trail:.4f}. "
+                    f"New entry: Wait for price pullback towards trailing stop ({curr_trail:.4f})."
+                )
+        elif signal in ["SELL", "BEARISH_HOLD"]:
+            risk_dist = max(abs(curr_trail - curr_price), last_atr)
+            tp1 = round(curr_price - (1.5 * risk_dist), 5)
+            tp2 = round(curr_price - (2.5 * risk_dist), 5)
+            entry_min = round(curr_price - max_slippage_points, 5)
+            if signal == "SELL":
+                execution_rule = (
+                    f"Immediate Execution: Enter SELL at current price ({curr_price:.4f}) or limit on pullback to Trailing Stop ({curr_trail:.4f}). "
+                    f"Min sell threshold is {entry_min:.4f}. DO NOT chase if price falls below {entry_min:.4f}."
+                )
+            else:
+                execution_rule = (
+                    f"Bearish continuation active. If already short, hold with SL at {curr_trail:.4f}. "
+                    f"New entry: Wait for price pullback towards trailing stop ({curr_trail:.4f})."
+                )
+        else:
+            risk_dist = last_atr
+            tp1 = round(curr_price + 1.5 * risk_dist, 5)
+            tp2 = round(curr_price + 2.5 * risk_dist, 5)
+            execution_rule = "Awaiting confirmed bar close crossover. Stand aside."
+
         conditions = [
             {
                 "name": "UT Trailing Stop Position",
@@ -239,4 +322,12 @@ class UTBotEngine:
             "sensitivity": sensitivity,
             "atr_period": atr_period,
             "conditions": conditions,
+            "market_regime": market_regime,
+            "session_directive": session_directive,
+            "validity_window_seconds": validity_window_seconds,
+            "validity_window_str": validity_window_str,
+            "execution_rule": execution_rule,
+            "take_profit_1": tp1,
+            "take_profit_2": tp2,
+            "max_slippage_points": max_slippage_points,
         }

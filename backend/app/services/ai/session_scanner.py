@@ -141,7 +141,13 @@ class SessionScannerWorker:
                                 candles = [CandleRead.model_validate(c) for c in reversed(c_res.scalars().all())]
                                 if len(candles) >= 10:
                                     sens = 1.5 if ("R_" in ut_sym_upper or "VOLATILITY" in ut_sym_upper or "1HZ" in ut_sym_upper) else 1.2
-                                    ut_eval = UTBotEngine.evaluate(candles, sensitivity=sens, atr_period=10)
+                                    ut_eval = UTBotEngine.evaluate(
+                                        candles,
+                                        sensitivity=sens,
+                                        atr_period=10,
+                                        symbol=ut_sym_upper,
+                                        timeframe=tf,
+                                    )
                                     if ut_eval.get("signal") in ["BUY", "SELL"]:
                                         logger.info(f"⚡ [SessionScanner] UT Bot {ut_eval['signal']} on selected pair {ut_sym_upper} ({tf})")
                                         notif_record = await notif_svc.dispatch_ut_bot_alert(
@@ -159,19 +165,21 @@ class SessionScannerWorker:
 
                 for inst in instruments:
                     symbol = inst.symbol.upper()
+                    is_24_7 = any(k in symbol for k in ["R_", "VOLATILITY", "1HZ", "BOOM", "CRASH", "BTC", "ETH"])
+                    effective_session = "CONTINUOUS_24_7" if is_24_7 else active_session
                     for tf in timeframes:
                         try:
                             req = AIAnalysisRequest(
                                 symbol=symbol,
                                 timeframe=tf,
-                                session_name=active_session,
+                                session_name=effective_session,
                             )
                             analysis_record = await ai_engine.execute_analysis(req)
 
                             item_res = {
                                 "symbol": symbol,
                                 "timeframe": tf,
-                                "session": active_session,
+                                "session": effective_session,
                                 "state": analysis_record.state.value,
                                 "summary": analysis_record.summary,
                                 "timestamp": analysis_record.timestamp_utc.isoformat(),

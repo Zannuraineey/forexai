@@ -257,6 +257,8 @@ async def get_ut_bot_analysis(
         candles=candles,
         sensitivity=sens,
         atr_period=atr_period,
+        symbol=sym,
+        timeframe=timeframe,
     )
     result["symbol"] = sym
     result["timeframe"] = timeframe
@@ -276,7 +278,13 @@ async def get_ut_bot_analysis(
             tf_res = await db.execute(tf_stmt)
             tf_candles = [CandleRead.model_validate(c) for c in reversed(tf_res.scalars().all())]
             if tf_candles:
-                tf_eval = UTBotEngine.evaluate(tf_candles, sensitivity=sens, atr_period=atr_period)
+                tf_eval = UTBotEngine.evaluate(
+                    tf_candles,
+                    sensitivity=sens,
+                    atr_period=atr_period,
+                    symbol=sym,
+                    timeframe=tf,
+                )
                 mtf[tf] = tf_eval["signal"]
             else:
                 mtf[tf] = "WAIT"
