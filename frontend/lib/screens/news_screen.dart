@@ -456,9 +456,12 @@ class _NewsScreenState extends State<NewsScreen> {
                 ),
               ),
               if (_intelligenceReport != null)
-                Text(
-                  _intelligenceReport!.aiEngineUsed.toUpperCase(),
-                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                Flexible(
+                  child: Text(
+                    _intelligenceReport!.aiEngineUsed.toUpperCase(),
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                  ),
                 ),
             ],
           ),
@@ -524,44 +527,42 @@ class _NewsScreenState extends State<NewsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    const Flexible(
-                      child: Text(
-                        'DXY (DOLLAR INDEX)',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                          letterSpacing: 0.5,
-                        ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'DXY (DOLLAR INDEX)',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: trendColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: Text(
+                      dxy.trend,
+                      style: TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w700,
+                        color: trendColor,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: trendColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                      child: Text(
-                        dxy.trend,
-                        style: TextStyle(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w700,
-                          color: trendColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 6),
               Text(
                 'REGIME: ${dxy.marketRegime}',
                 style: const TextStyle(
@@ -1296,9 +1297,12 @@ class _NewsScreenState extends State<NewsScreen> {
                   letterSpacing: 0.5,
                 ),
               ),
-              Text(
-                report.aiEngineUsed.toUpperCase(),
-                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+              Flexible(
+                child: Text(
+                  report.aiEngineUsed.toUpperCase(),
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+                ),
               ),
             ],
           ),
