@@ -19,6 +19,7 @@ from app.schemas.ai_analysis import (
 from app.services.features.context_engine import MarketContextEngine, MarketContextSnapshot
 from app.services.session import SessionEngine
 from app.services.strategy_service import StrategyService
+from app.services.context.market_context_assembler import MarketContextAssembler
 from app.services.ai.provider_interface import IAIAnalysisProvider
 from app.services.ai.deterministic_provider import DeterministicAIProvider
 
@@ -86,6 +87,43 @@ class AIAnalysisEngine:
             daily_candles=daily_candles,
             pip_size=pip_size,
         )
+
+        # 3b. Multi-Timeframe Context & 7H Profile Assembly
+        async def _fetch_tf_candles(tf: str) -> List[CandleRead]:
+            if tf == timeframe:
+                return candles
+            q = (
+                select(Candle)
+                .where(Candle.instrument_id == instrument.id, Candle.timeframe == tf)
+                .order_by(desc(Candle.timestamp_utc))
+                .limit(60)
+            )
+            q_res = await self.db.execute(q)
+            q_raw = q_res.scalars().all()
+            return [CandleRead.model_validate(c) for c in reversed(q_raw)]
+
+        candles_4h = await _fetch_tf_candles("4h")
+        candles_1h = await _fetch_tf_candles("1h")
+        candles_15m = await _fetch_tf_candles("15m")
+
+        candles_by_tf = {
+            "4h": candles_4h,
+            "1h": candles_1h,
+            "15m": candles_15m,
+            timeframe: candles,
+        }
+
+        structured_state = MarketContextAssembler.assemble(
+            symbol=symbol,
+            requested_timeframe=timeframe,
+            current_candle=current_candle,
+            candles_by_timeframe=candles_by_tf,
+            session_state=context_snapshot.session_state,
+            market_structure=context_snapshot.market_structure,
+            reference_levels=context_snapshot.reference_levels,
+            recent_liquidity_sweeps=context_snapshot.recent_liquidity_sweeps,
+        )
+        context_snapshot.structured_market_state = structured_state
 
         # 4. Resolve Active Session
         session_name = request.session_name
@@ -207,5 +245,7 @@ class AIAnalysisEngine:
             ambiguities_detected=ai_output.ambiguities_detected,
             full_reasoning=record.full_reasoning,
             trade_setup=ai_output.trade_setup,
+            setup_snapshot=ai_output.setup_snapshot,
+            bias_validation=ai_output.bias_validation,
             created_at=record.created_at,
         )

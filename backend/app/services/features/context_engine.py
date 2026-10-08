@@ -9,6 +9,7 @@ from app.services.features.structure import (
 )
 from app.services.features.reference_levels import ReferenceLevelsCalculator, KeyReferenceLevels
 from app.services.session import SessionEngine, CurrentSessionState
+from app.schemas.market_state import StructuredMarketState
 
 class TechnicalIndicatorsSnapshot(BaseModel):
     rsi_14: Optional[float] = None
@@ -49,6 +50,7 @@ class MarketContextSnapshot(BaseModel):
     reference_levels: KeyReferenceLevels
     session_state: Optional[CurrentSessionState] = None
     recent_liquidity_sweeps: List[LiquiditySweep] = []
+    structured_market_state: Optional[StructuredMarketState] = None
 
     model_config = ConfigDict(from_attributes=True)
 

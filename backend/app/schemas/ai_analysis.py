@@ -3,6 +3,10 @@ from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, ConfigDict, Field
 from app.models.analysis import AnalysisStateEnum
 
+from app.schemas.target_realism import TargetRealismMetrics
+from app.schemas.setup_snapshot import SetupContextSnapshot
+from app.schemas.bias_validation import BiasValidationResult
+
 class ConditionStatus(BaseModel):
     condition: str
     satisfied: bool
@@ -42,6 +46,9 @@ class TradeSetup(BaseModel):
     model: Optional[str] = None
     rr_ratio: Optional[float] = None
     sl_buffer_pips: Optional[float] = None
+    target_realism: Optional[TargetRealismMetrics] = None
+    setup_snapshot: Optional[SetupContextSnapshot] = None
+    bias_validation: Optional[BiasValidationResult] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -53,6 +60,8 @@ class AIAnalysisOutput(BaseModel):
     confidence_notes: Optional[str] = None
     full_reasoning: Optional[str] = None
     trade_setup: Optional[TradeSetup] = None
+    setup_snapshot: Optional[SetupContextSnapshot] = None
+    bias_validation: Optional[BiasValidationResult] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -80,6 +89,8 @@ class AnalysisRecordRead(BaseModel):
     ambiguities_detected: List[AmbiguityItem] = []
     full_reasoning: Optional[str] = None
     trade_setup: Optional[TradeSetup] = None
+    setup_snapshot: Optional[SetupContextSnapshot] = None
+    bias_validation: Optional[BiasValidationResult] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

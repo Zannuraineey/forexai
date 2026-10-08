@@ -14,6 +14,11 @@ from app.schemas.ai_analysis import (
 from app.models.analysis import AnalysisStateEnum
 from app.services.ai.provider_interface import IAIAnalysisProvider
 from app.services.session import SessionEngine
+from app.schemas.target_realism import TargetClassification, TargetRealismMetrics
+from app.services.features.target_realism import TargetRealismAnalyzer
+from app.schemas.setup_snapshot import SetupContextSnapshot
+from app.services.bias.bias_validation_engine import BiasValidationEngine
+from app.schemas.bias_validation import FinalBiasState, BiasQuality, BiasValidationResult
 
 class DeterministicAIProvider(IAIAnalysisProvider):
     """
@@ -715,6 +720,53 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             ))
 
         # -------------------------------------------------------------
+        # Multi-Layer Bias Validation Safety Gate
+        # -------------------------------------------------------------
+        bias_res = BiasValidationEngine.validate_bias(
+            symbol=symbol,
+            timestamp=timestamp_utc,
+            market_context=market_context,
+            dxy_data=market_context.get("dxy"),
+            news_data=market_context.get("news"),
+        )
+
+        if trade_proposal:
+            prop_action = trade_proposal["action"]
+            is_buy = "BUY" in prop_action
+            is_sell = "SELL" in prop_action
+
+            if bias_res.final_bias == FinalBiasState.CONFLICTED:
+                logger.warning(f"Trade proposal blocked by CONFLICTED bias for {symbol}: {bias_res.explanation}")
+                conditions.append(ConditionStatus(
+                    condition="Unified Directional Bias Alignment",
+                    satisfied=False,
+                    evidence=f"Blocked: Market structure is CONFLICTED. {bias_res.explanation}"
+                ))
+                trade_proposal = None
+            elif is_buy and bias_res.final_bias == FinalBiasState.BEARISH and bias_res.bias_quality in (BiasQuality.HIGH, BiasQuality.MODERATE):
+                logger.warning(f"BUY trade proposal blocked by BEARISH HTF bias for {symbol}: {bias_res.explanation}")
+                conditions.append(ConditionStatus(
+                    condition="Unified Directional Bias Alignment",
+                    satisfied=False,
+                    evidence=f"Blocked: BUY proposal contradicts {bias_res.final_bias.value} HTF bias ({bias_res.bias_quality.value}). {bias_res.explanation}"
+                ))
+                trade_proposal = None
+            elif is_sell and bias_res.final_bias == FinalBiasState.BULLISH and bias_res.bias_quality in (BiasQuality.HIGH, BiasQuality.MODERATE):
+                logger.warning(f"SELL trade proposal blocked by BULLISH HTF bias for {symbol}: {bias_res.explanation}")
+                conditions.append(ConditionStatus(
+                    condition="Unified Directional Bias Alignment",
+                    satisfied=False,
+                    evidence=f"Blocked: SELL proposal contradicts {bias_res.final_bias.value} HTF bias ({bias_res.bias_quality.value}). {bias_res.explanation}"
+                ))
+                trade_proposal = None
+            else:
+                conditions.append(ConditionStatus(
+                    condition="Unified Directional Bias Alignment",
+                    satisfied=True,
+                    evidence=f"Aligned: Bias is {bias_res.final_bias.value} ({bias_res.bias_quality.value} quality)."
+                ))
+
+        # -------------------------------------------------------------
         # Safety Gate: Double Check Trade Geometry Before VALID_SETUP
         # -------------------------------------------------------------
         if trade_proposal:
@@ -757,13 +809,128 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             effective_pip = pip_size if (pip_size and pip_size > 0) else 0.0001
             risk_pips = round(risk_dist / effective_pip, 1)
 
+            # Evaluate Target Realism
+            effective_pip = pip_size if (pip_size and pip_size > 0) else 0.0001
+            risk_pips = round(risk_dist / effective_pip, 1)
+
+            target_metrics = TargetRealismAnalyzer.evaluate_target(
+                action=act,
+                entry_price=ent,
+                stop_loss=sl,
+                take_profit=tp2,
+                atr=atr_pips_val * pip_size,
+                pip_size=effective_pip,
+                session_high=asian_levels.get("high") or london_levels.get("high"),
+                session_low=asian_levels.get("low") or london_levels.get("low"),
+                daily_high=pdh,
+                daily_low=pdl,
+                nearest_liquidity_high=pdh or asian_levels.get("high"),
+                nearest_liquidity_low=pdl or asian_levels.get("low"),
+            )
+
             confluence_items = [
                 f"{swp} Liquidity Purged",
                 "Judas Swing Exhaustion Wick Confirmed",
                 "MSS Displacement Verified (Zero-Repaint)",
                 f"Active FVG Retest Entry Zone with {sl_buf}p ATR Buffer",
                 f"Session Killzone: {kz} ({grade})",
+                f"Target Realism: {target_metrics.classification.value} ({target_metrics.rr_ratio}R)",
             ]
+
+            # Assemble Conditioning Variables for SetupContextSnapshot
+            struct_market_state = market_context.get("structured_market_state") or {}
+            profile_ctx = struct_market_state.get("seven_hour_profile") or market_context.get("seven_hour_profile") or {}
+            profile_dict = {
+                "seven_hour_direction": profile_ctx.get("direction") if isinstance(profile_ctx, dict) else getattr(profile_ctx, "direction", "NEUTRAL"),
+                "seven_hour_classification": profile_ctx.get("classification") if isinstance(profile_ctx, dict) else getattr(profile_ctx, "classification", "INSUFFICIENT_DATA"),
+                "seven_hour_range": profile_ctx.get("range", 0.0) if isinstance(profile_ctx, dict) else getattr(profile_ctx, "range", 0.0),
+                "seven_hour_relationship": profile_ctx.get("previous_relationship") if isinstance(profile_ctx, dict) else getattr(profile_ctx, "previous_relationship", None),
+                "status": profile_ctx.get("status", "IN_PROGRESS") if isinstance(profile_ctx, dict) else getattr(profile_ctx, "status", "IN_PROGRESS"),
+            }
+
+            sess_high = asian_levels.get("high") or london_levels.get("high") or ny_levels.get("high")
+            sess_low = asian_levels.get("low") or london_levels.get("low") or ny_levels.get("low")
+            sess_range = round(sess_high - sess_low, 5) if (sess_high and sess_low) else 0.0
+            session_dict = {
+                "primary_session": session_state.get("primary_session", "off_session"),
+                "active_sessions": session_state.get("active_sessions", []),
+                "killzone": kz_name,
+                "session_high": sess_high,
+                "session_low": sess_low,
+                "session_sweep": bool(bearish_sweep or bullish_sweep),
+                "session_range": sess_range,
+            }
+
+            # Intermarket DXY Context
+            dxy_data = market_context.get("dxy") or {}
+            dxy_trend = dxy_data.get("trend", "CONSOLIDATING")
+            dxy_chg = dxy_data.get("change_pct", 0.0)
+            
+            is_usd_quote = any(curr in symbol for curr in ["EUR", "GBP", "AUD", "NZD", "XAU", "XAG"])
+            if not dxy_data:
+                dxy_rel = "UNAVAILABLE"
+            elif is_usd_quote:
+                if dxy_trend == "BULLISH":
+                    dxy_rel = "CONTRADICTING" if "BUY" in act else "SUPPORTIVE"
+                elif dxy_trend == "BEARISH":
+                    dxy_rel = "SUPPORTIVE" if "BUY" in act else "CONTRADICTING"
+                else:
+                    dxy_rel = "NEUTRAL"
+            else:
+                if dxy_trend == "BULLISH":
+                    dxy_rel = "SUPPORTIVE" if "BUY" in act else "CONTRADICTING"
+                elif dxy_trend == "BEARISH":
+                    dxy_rel = "CONTRADICTING" if "BUY" in act else "SUPPORTIVE"
+                else:
+                    dxy_rel = "NEUTRAL"
+
+            dxy_dict = {
+                "dxy_direction": dxy_trend,
+                "dxy_trend_strength": dxy_data.get("confirmation_status", "NEUTRAL"),
+                "dxy_change": dxy_chg,
+                "dxy_relationship_to_symbol": dxy_rel,
+            }
+
+            news_data = market_context.get("news") or {}
+            news_dict = {
+                "high_impact_news_nearby": news_data.get("high_impact_news_nearby", False),
+                "news_direction": news_data.get("news_direction", "NEUTRAL"),
+                "news_event": news_data.get("news_event", "NONE"),
+                "minutes_to_event": news_data.get("minutes_to_event"),
+                "minutes_since_event": news_data.get("minutes_since_event"),
+                "usd_news_risk": news_data.get("usd_news_risk", "LOW"),
+            }
+
+            snapshot_obj = SetupContextSnapshot(
+                symbol=symbol,
+                timestamp=timestamp_utc,
+                profile=profile_dict,
+                session=session_dict,
+                htf=struct_market_state.get("timeframe_context") or {},
+                structure={
+                    "trend": trend_state,
+                    "recent_mss": recent_mss,
+                    "swings": recent_swings,
+                },
+                liquidity={
+                    "bsl": pdh or sess_high,
+                    "ssl": pdl or sess_low,
+                    "recent_sweeps": sweeps,
+                },
+                dxy=dxy_dict,
+                news=news_dict,
+                entry=round(ent, 5),
+                stop_loss=round(sl, 5),
+                tp1=round(tp1, 5),
+                tp2=round(tp2, 5),
+                tp3=round(tp3, 5) if tp3 else None,
+                risk_distance=round(risk_dist, 5),
+                rr_tp1=1.5,
+                rr_tp2=round(rr, 2),
+                rr_tp3=5.0,
+                target_quality=target_metrics.classification.value,
+                data_quality="COMPLETE",
+            )
 
             trade_setup_obj = TradeSetup(
                 action=act,
@@ -799,18 +966,22 @@ class DeterministicAIProvider(IAIAnalysisProvider):
                 model=model,
                 rr_ratio=rr,
                 sl_buffer_pips=sl_buf,
+                target_realism=target_metrics,
+                setup_snapshot=snapshot_obj,
+                bias_validation=bias_res,
             )
 
             summary = (
                 f"🎯 VALID SETUP [{act}]: {symbol} ({grade} • {kz}). "
                 f"Entry: {ent:.2f} | SL: {sl:.2f} (+{sl_buf}p ATR buffer) | "
                 f"TP1: {tp1:.2f} (1:1.5 - Take 40%, SL to BE) | "
-                f"TP2: {tp2:.2f} (1:{rr} - Take 40% at Liquidity) | "
+                f"TP2: {tp2:.2f} (1:{rr} - Take 40% at Liquidity [{target_metrics.classification.value}]) | "
                 f"TP3: {tp3:.2f} (Runner - Trail 20%). "
                 f"{swp} swept, Judas exhaustion & MSS confirmed."
             )
             confidence_notes = (
                 f"Institutional Zero-Repaint Confirmation: Closed exhaustion candle & MSS verified. "
+                f"Target Realism: {target_metrics.classification.value}. "
                 f"Stop Loss buffered with {sl_buf} pips ATR. 3-tier scaling targets up to 1:{rr} R:R."
             )
         elif (bearish_sweep or bullish_sweep):
@@ -875,4 +1046,6 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             confidence_notes=confidence_notes,
             full_reasoning=reasoning,
             trade_setup=trade_setup_obj,
+            setup_snapshot=trade_setup_obj.setup_snapshot if trade_setup_obj else None,
+            bias_validation=bias_res,
         )

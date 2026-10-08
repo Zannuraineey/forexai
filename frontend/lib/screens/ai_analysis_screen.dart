@@ -270,6 +270,39 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
                 record.summary,
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, height: 1.4),
               ),
+              if (record.biasValidation != null || record.setupSnapshot != null) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    if (record.biasValidation != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Bias: ${record.biasValidation!.bias} (${(record.biasValidation!.confidence * 100).toStringAsFixed(0)}%)',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    if (record.setupSnapshot?.profileState != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '7H Profile: ${record.setupSnapshot!.profileState}',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),

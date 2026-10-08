@@ -1205,6 +1205,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 ),
                 const SizedBox(height: 14),
 
+                _buildRealismAndBiasBanner(setup),
+
                 // Core Geometry Matrix: Entry | Stop Loss | Target 2
                 LayoutBuilder(
                   builder: (context, constraints) {
@@ -1646,6 +1648,117 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         duration: const Duration(seconds: 2),
         backgroundColor: ok ? AppTheme.surfaceSubtle : AppTheme.invalidated.withValues(alpha: 0.8),
         behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Widget _buildRealismAndBiasBanner(TradeSetupModel? setup) {
+    final realism = setup?.targetRealism;
+    final bias = setup?.biasValidation ?? _analysis?.biasValidation;
+    final snapshot = setup?.setupSnapshot ?? _analysis?.setupSnapshot;
+
+    if (realism == null && bias == null && snapshot == null) {
+      return const SizedBox.shrink();
+    }
+
+    Color realismColor = AppTheme.upGreen;
+    if (realism?.classification == 'EXTREME_TARGET') {
+      realismColor = AppTheme.downRed;
+    } else if (realism?.classification == 'EXTENDED_TARGET') {
+      realismColor = const Color(0xFFF59E0B);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceSubtle,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (bias != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: (bias.bias == 'BULLISH'
+                            ? AppTheme.upGreen
+                            : bias.bias == 'BEARISH'
+                                ? AppTheme.downRed
+                                : const Color(0xFFF59E0B))
+                        .withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: bias.bias == 'BULLISH'
+                          ? AppTheme.upGreen
+                          : bias.bias == 'BEARISH'
+                              ? AppTheme.downRed
+                              : const Color(0xFFF59E0B),
+                    ),
+                  ),
+                  child: Text(
+                    'BIAS: ${bias.bias} (${(bias.confidence * 100).toStringAsFixed(0)}%)',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: bias.bias == 'BULLISH'
+                          ? AppTheme.upGreen
+                          : bias.bias == 'BEARISH'
+                              ? AppTheme.downRed
+                              : const Color(0xFFF59E0B),
+                    ),
+                  ),
+                ),
+              if (snapshot?.profileState != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFF38BDF8)),
+                  ),
+                  child: Text(
+                    '7H: ${snapshot!.profileState}',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF38BDF8),
+                    ),
+                  ),
+                ),
+              if (realism != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: realismColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: realismColor),
+                  ),
+                  child: Text(
+                    'TARGET: ${realism.classification.replaceAll("_", " ")}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: realismColor,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (realism != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              '${realism.recommendation} • ADR: TP1 ${realism.adrPercentTp1?.toStringAsFixed(1) ?? "0"}% | TP2 ${realism.adrPercentTp2?.toStringAsFixed(1) ?? "0"}% | TP3 ${realism.adrPercentTp3?.toStringAsFixed(1) ?? "0"}%',
+              style: TextStyle(fontSize: 10.5, color: realismColor, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ],
       ),
     );
   }
