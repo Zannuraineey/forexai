@@ -126,13 +126,31 @@ Future<void> _initFCM() async {
       final symbol = message.data['symbol']?.toString();
       final state = message.data['state']?.toString() ?? 'ALERT';
       final type = message.data['type']?.toString();
+      final action = message.data['action']?.toString() ?? '';
+      final eventType = message.data['event_type']?.toString() ?? '';
+
       final isEconomicEvent = type == 'ECONOMIC_EVENT_UPCOMING' || type == 'ECONOMIC_EVENT_DAILY_BRIEFING';
+      final isTradeSetup = type == 'TRADE_SETUP_ALERT';
+      final isLifecycle = type == 'TRADE_LIFECYCLE_EVENT';
       final isHighEvent = message.data['impact'] == 'HIGH';
 
-      final isBullish = state.contains('VALID') || title.contains('VALID');
-      final Color accentColor = isEconomicEvent
-          ? (isHighEvent ? const Color(0xFFEF4444) : const Color(0xFF3B82F6))
-          : (isBullish ? const Color(0xFF10B981) : const Color(0xFFF59E0B));
+      Color accentColor;
+      if (isEconomicEvent) {
+        accentColor = isHighEvent ? const Color(0xFFEF4444) : const Color(0xFF3B82F6);
+      } else if (isTradeSetup) {
+        accentColor = action.contains('SELL') ? const Color(0xFFEF4444) : const Color(0xFF10B981);
+      } else if (isLifecycle) {
+        if (eventType.contains('TP') || eventType.contains('FILLED')) {
+          accentColor = const Color(0xFF10B981);
+        } else if (eventType.contains('CANCEL')) {
+          accentColor = const Color(0xFFF59E0B);
+        } else {
+          accentColor = const Color(0xFFEF4444);
+        }
+      } else {
+        final isBullish = state.contains('VALID') || title.contains('VALID');
+        accentColor = isBullish ? const Color(0xFF10B981) : const Color(0xFFF59E0B);
+      }
 
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
@@ -180,7 +198,11 @@ Future<void> _initFCM() async {
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        isBullish ? Icons.trending_up_rounded : Icons.radar_rounded,
+                        isTradeSetup
+                            ? (action.contains('SELL') ? Icons.trending_down_rounded : Icons.trending_up_rounded)
+                            : (isLifecycle
+                                ? (eventType.contains('TP') ? Icons.emoji_events_rounded : Icons.track_changes_rounded)
+                                : (accentColor == const Color(0xFF10B981) ? Icons.trending_up_rounded : Icons.radar_rounded)),
                         color: accentColor,
                         size: 18,
                       ),
@@ -205,9 +227,11 @@ Future<void> _initFCM() async {
                         color: const Color(0xFF334155),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text(
-                        'LIVE',
-                        style: TextStyle(
+                      child: Text(
+                        isTradeSetup
+                            ? 'TRADE TICKET'
+                            : (isLifecycle ? 'LIFECYCLE' : (isEconomicEvent ? 'MACRO' : 'LIVE')),
+                        style: const TextStyle(
                           color: Color(0xFF94A3B8),
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
@@ -252,7 +276,11 @@ Future<void> _initFCM() async {
                             Text(
                               isEconomicEvent
                                   ? (type == 'ECONOMIC_EVENT_DAILY_BRIEFING' ? 'VIEW CALENDAR' : 'VIEW EVENT')
-                                  : (symbol != null ? 'VIEW $symbol' : 'INSPECT SETUP'),
+                                  : (isTradeSetup
+                                      ? (symbol != null ? 'VIEW $symbol TICKET' : 'VIEW TICKET')
+                                      : (isLifecycle
+                                          ? (symbol != null ? 'INSPECT $symbol' : 'INSPECT TICKET')
+                                          : (symbol != null ? 'VIEW $symbol' : 'INSPECT SETUP'))),
                               style: TextStyle(
                                 color: accentColor,
                                 fontSize: 11,
