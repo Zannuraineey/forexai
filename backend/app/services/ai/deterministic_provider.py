@@ -1,6 +1,8 @@
+import math
 import re
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
+from app.core.logging import logger
 from app.schemas.ai_analysis import AIAnalysisOutput, ConditionStatus, AmbiguityItem
 from app.models.analysis import AnalysisStateEnum
 from app.services.ai.provider_interface import IAIAnalysisProvider
@@ -24,6 +26,153 @@ class DeterministicAIProvider(IAIAnalysisProvider):
         (r"\b(reasonable|good)\s+risk\b", "Risk/reward condition lacks numerical ratio (e.g., minimum 1:2 R:R).", "Specify explicit minimum risk-to-reward ratio."),
         (r"\b(soon|later|eventually)\b", "Time horizon is undefined.", "Specify an exact candle count or session window."),
     ]
+
+    @staticmethod
+    def validate_trade_geometry(
+        action: str,
+        entry_price: float,
+        stop_loss: float,
+        take_profit: float,
+    ) -> Dict[str, Any]:
+        """
+        Validates directional trade geometry and computes directional R:R without abs().
+        Enforces:
+          - LONG / BUY:   SL < Entry < TP  (risk_dist = Entry - SL > 0, reward_dist = TP - Entry > 0)
+          - SHORT / SELL: TP < Entry < SL  (risk_dist = SL - Entry > 0, reward_dist = Entry - TP > 0)
+          - Finite prices, positive risk and reward distances.
+        """
+        try:
+            entry = float(entry_price)
+            sl = float(stop_loss)
+            tp = float(take_profit)
+        except (TypeError, ValueError):
+            return {
+                "valid": False,
+                "reason": f"Non-numeric trade parameters: entry={entry_price}, sl={stop_loss}, tp={take_profit}",
+                "risk_distance": 0.0,
+                "reward_distance": 0.0,
+                "rr_ratio": 0.0,
+            }
+
+        if not (math.isfinite(entry) and math.isfinite(sl) and math.isfinite(tp)):
+            return {
+                "valid": False,
+                "reason": f"Non-finite trade parameters: entry={entry}, sl={sl}, tp={tp}",
+                "risk_distance": 0.0,
+                "reward_distance": 0.0,
+                "rr_ratio": 0.0,
+            }
+
+        act = action.strip().upper()
+        is_long = "BUY" in act or "LONG" in act
+        is_short = "SELL" in act or "SHORT" in act
+
+        if not (is_long or is_short):
+            return {
+                "valid": False,
+                "reason": f"Unrecognized action '{action}': expected BUY/LONG or SELL/SHORT",
+                "risk_distance": 0.0,
+                "reward_distance": 0.0,
+                "rr_ratio": 0.0,
+            }
+
+        if is_long:
+            risk_dist = entry - sl
+            reward_dist = tp - entry
+            if risk_dist <= 0:
+                return {
+                    "valid": False,
+                    "reason": f"Invalid LONG geometry: SL ({sl:.2f}) must be strictly less than Entry ({entry:.2f}), risk_distance={risk_dist:.2f} <= 0 (expected SL < Entry < TP)",
+                    "risk_distance": round(risk_dist, 4),
+                    "reward_distance": round(reward_dist, 4),
+                    "rr_ratio": 0.0,
+                }
+            if reward_dist <= 0:
+                return {
+                    "valid": False,
+                    "reason": f"Invalid LONG geometry: TP ({tp:.2f}) must be strictly greater than Entry ({entry:.2f}), reward_distance={reward_dist:.2f} <= 0 (expected SL < Entry < TP)",
+                    "risk_distance": round(risk_dist, 4),
+                    "reward_distance": round(reward_dist, 4),
+                    "rr_ratio": 0.0,
+                }
+            rr_ratio = round(reward_dist / risk_dist, 2)
+            return {
+                "valid": True,
+                "reason": f"Valid LONG geometry: SL ({sl:.2f}) < Entry ({entry:.2f}) < TP ({tp:.2f})",
+                "risk_distance": round(risk_dist, 4),
+                "reward_distance": round(reward_dist, 4),
+                "rr_ratio": rr_ratio,
+            }
+
+        else:  # is_short
+            risk_dist = sl - entry
+            reward_dist = entry - tp
+            if risk_dist <= 0:
+                return {
+                    "valid": False,
+                    "reason": f"Invalid SHORT geometry: SL ({sl:.2f}) must be strictly greater than Entry ({entry:.2f}), risk_distance={risk_dist:.2f} <= 0 (expected TP < Entry < SL)",
+                    "risk_distance": round(risk_dist, 4),
+                    "reward_distance": round(reward_dist, 4),
+                    "rr_ratio": 0.0,
+                }
+            if reward_dist <= 0:
+                return {
+                    "valid": False,
+                    "reason": f"Invalid SHORT geometry: TP ({tp:.2f}) must be strictly less than Entry ({entry:.2f}), reward_distance={reward_dist:.2f} <= 0 (expected TP < Entry < SL)",
+                    "risk_distance": round(risk_dist, 4),
+                    "reward_distance": round(reward_dist, 4),
+                    "rr_ratio": 0.0,
+                }
+            rr_ratio = round(reward_dist / risk_dist, 2)
+            return {
+                "valid": True,
+                "reason": f"Valid SHORT geometry: TP ({tp:.2f}) < Entry ({entry:.2f}) < SL ({sl:.2f})",
+                "risk_distance": round(risk_dist, 4),
+                "reward_distance": round(reward_dist, 4),
+                "rr_ratio": rr_ratio,
+            }
+
+    _validate_trade_geometry = validate_trade_geometry
+
+    @staticmethod
+    def get_sweep_timestamp(sweep: Any) -> datetime:
+        """Extract canonical timestamp from a LiquiditySweep object or dict for recency comparison."""
+        if sweep is None:
+            return datetime.min.replace(tzinfo=timezone.utc)
+
+        val = None
+        if isinstance(sweep, dict):
+            val = sweep.get("sweep_candle_ts") or sweep.get("timestamp_utc") or sweep.get("timestamp")
+        elif hasattr(sweep, "sweep_candle_ts"):
+            val = getattr(sweep, "sweep_candle_ts")
+        elif hasattr(sweep, "timestamp_utc"):
+            val = getattr(sweep, "timestamp_utc")
+
+        if val is None:
+            return datetime.min.replace(tzinfo=timezone.utc)
+
+        if isinstance(val, datetime):
+            if val.tzinfo is None:
+                return val.replace(tzinfo=timezone.utc)
+            return val
+
+        if isinstance(val, (int, float)):
+            try:
+                return datetime.fromtimestamp(val, tz=timezone.utc)
+            except Exception:
+                return datetime.min.replace(tzinfo=timezone.utc)
+
+        if isinstance(val, str):
+            try:
+                clean_str = val.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(clean_str)
+                if dt.tzinfo is None:
+                    return dt.replace(tzinfo=timezone.utc)
+                return dt
+            except Exception:
+                return datetime.min.replace(tzinfo=timezone.utc)
+
+        return datetime.min.replace(tzinfo=timezone.utc)
 
     async def analyze(
         self,
@@ -155,27 +304,39 @@ class DeterministicAIProvider(IAIAnalysisProvider):
         is_asian_model = "tokyo sweep" in lower_inst or "pre-asia" in lower_inst or "mean-reversion" in lower_inst or "asian" in lower_inst
 
         # Track execution proposal
-        trade_proposal: Optional[Dict[str, Any]] = None
+        trade_proposal: Optional[Dict[str, Any]] = market_context.get("candidate_trade_proposal") or market_context.get("trade_proposal") or None
 
         # -------------------------------------------------------------
         # Institutional Rule 1: Liquidity Sweep Evaluation
         # -------------------------------------------------------------
-        bearish_sweep = None
-        bullish_sweep = None
+        high_sweeps: List[Any] = []
+        low_sweeps: List[Any] = []
 
-        # Check sweeps of Highs (Buy-Side Liquidity purged -> potential SHORT)
         for s in sweeps:
-            l_type = s.get("level_type", "").upper()
+            if isinstance(s, dict):
+                l_type = str(s.get("level_type", "")).upper()
+            else:
+                l_type = str(getattr(s, "level_type", "")).upper()
+
             if "HIGH" in l_type:
-                bearish_sweep = s
-                break
+                high_sweeps.append(s)
+            elif "LOW" in l_type:
+                low_sweeps.append(s)
 
-        # Check sweeps of Lows (Sell-Side Liquidity purged -> potential LONG)
-        for s in sweeps:
-            l_type = s.get("level_type", "").upper()
-            if "LOW" in l_type:
-                bullish_sweep = s
-                break
+        # Select most recent valid sweep deterministically (tie-break preserves later item)
+        bearish_sweep = None
+        if high_sweeps:
+            bearish_sweep = max(
+                enumerate(high_sweeps),
+                key=lambda x: (self.get_sweep_timestamp(x[1]), x[0])
+            )[1]
+
+        bullish_sweep = None
+        if low_sweeps:
+            bullish_sweep = max(
+                enumerate(low_sweeps),
+                key=lambda x: (self.get_sweep_timestamp(x[1]), x[0])
+            )[1]
 
         # -------------------------------------------------------------
         # Institutional Rule 2: Displacement & Market Structure Shift (MSS)
@@ -183,7 +344,11 @@ class DeterministicAIProvider(IAIAnalysisProvider):
         bearish_mss = None
         bullish_mss = None
         for m in recent_mss:
-            m_type = m.get("mss_type", "").upper()
+            if isinstance(m, dict):
+                m_type = str(m.get("mss_type", "")).upper()
+            else:
+                m_type = str(getattr(m, "mss_type", "")).upper()
+
             if m_type == "BEARISH":
                 bearish_mss = m
             elif m_type == "BULLISH":
@@ -195,25 +360,86 @@ class DeterministicAIProvider(IAIAnalysisProvider):
         bearish_fvg = None
         bullish_fvg = None
         for f in active_fvgs:
-            f_type = f.get("fvg_type", "").upper()
-            if f_type == "BEARISH" and not f.get("mitigated", False):
+            if isinstance(f, dict):
+                f_type = str(f.get("fvg_type", "")).upper()
+                mit = f.get("mitigated", False)
+            else:
+                f_type = str(getattr(f, "fvg_type", "")).upper()
+                mit = getattr(f, "mitigated", False)
+
+            if f_type == "BEARISH" and not mit:
                 bearish_fvg = f
-            elif f_type == "BULLISH" and not f.get("mitigated", False):
+            elif f_type == "BULLISH" and not mit:
                 bullish_fvg = f
 
-        # Evaluate Setup Scenarios
+        # -------------------------------------------------------------
+        # Directional Candidate Scenario & Dual-Sweep Conflict Resolution
+        # -------------------------------------------------------------
+        candidate_scenario = "NO_SWEEP"
+        if bearish_sweep is not None and bullish_sweep is not None:
+            ts_high = self.get_sweep_timestamp(bearish_sweep)
+            ts_low = self.get_sweep_timestamp(bullish_sweep)
+
+            if ts_high > ts_low:
+                # High sweep is strictly more recent
+                if bullish_mss is not None and bearish_mss is None:
+                    candidate_scenario = "CONFLICT"
+                else:
+                    candidate_scenario = "BEARISH"
+            elif ts_low > ts_high:
+                # Low sweep is strictly more recent (older high sweep does NOT suppress it)
+                if bearish_mss is not None and bullish_mss is None:
+                    candidate_scenario = "CONFLICT"
+                else:
+                    candidate_scenario = "BULLISH"
+            else:
+                # Identical timestamp / ambiguous ordering
+                candidate_scenario = "CONFLICT"
+        elif bearish_sweep is not None:
+            candidate_scenario = "BEARISH"
+        elif bullish_sweep is not None:
+            candidate_scenario = "BULLISH"
+
+        # Handle conflicting dual-sweep ambiguity
+        if candidate_scenario == "CONFLICT":
+            ts_h = self.get_sweep_timestamp(bearish_sweep)
+            ts_l = self.get_sweep_timestamp(bullish_sweep)
+            conditions.append(ConditionStatus(
+                condition="Directional Sweep & Market Structure Alignment",
+                satisfied=False,
+                evidence=(
+                    f"Dual sweep conflict: High swept at {ts_h.isoformat()} vs Low swept at {ts_l.isoformat()}. "
+                    f"Bearish MSS={bearish_mss is not None}, Bullish MSS={bullish_mss is not None}. Direction ambiguous."
+                )
+            ))
+            ambiguities.append(AmbiguityItem(
+                text_snippet="Dual sweep conflict",
+                reason="Opposing liquidity sweeps detected without unified directional displacement.",
+                suggestion="Await directional breakout and displacement MSS before entering.",
+            ))
+
         # A. Bearish Reversal Setup (BSL Swept -> Judas Exhaustion -> MSS Bearish -> Bearish FVG Retest)
-        if bearish_sweep is not None:
-            lvl_name = bearish_sweep.get("level_type", "KEY_HIGH")
-            extreme = float(bearish_sweep.get("extreme_price", current_price))
-            wick_ratio = float(bearish_sweep.get("rejection_wick_ratio", 0.0))
-            is_exhaustion = bool(bearish_sweep.get("is_exhaustion_candle", wick_ratio >= 0.35))
+        elif candidate_scenario == "BEARISH":
+            lvl_name = bearish_sweep.get("level_type", "KEY_HIGH") if isinstance(bearish_sweep, dict) else getattr(bearish_sweep, "level_type", "KEY_HIGH")
+            extreme = float(bearish_sweep.get("extreme_price", current_price) if isinstance(bearish_sweep, dict) else getattr(bearish_sweep, "extreme_price", current_price))
+            wick_ratio = float(bearish_sweep.get("rejection_wick_ratio", 0.0) if isinstance(bearish_sweep, dict) else getattr(bearish_sweep, "rejection_wick_ratio", 0.0))
+            is_exhaustion = bool(bearish_sweep.get("is_exhaustion_candle", wick_ratio >= 0.35) if isinstance(bearish_sweep, dict) else getattr(bearish_sweep, "is_exhaustion_candle", wick_ratio >= 0.35))
+            swp_depth = bearish_sweep.get("sweep_depth_pips", 0) if isinstance(bearish_sweep, dict) else getattr(bearish_sweep, "sweep_depth_pips", 0)
 
             conditions.append(ConditionStatus(
                 condition=f"Buy-Side Liquidity Swept ({lvl_name})",
                 satisfied=True,
-                evidence=f"Wick peaked at {extreme:.2f} and closed inside. Depth: {bearish_sweep.get('sweep_depth_pips', 0)} pips."
+                evidence=f"Wick peaked at {extreme:.2f} and closed inside. Depth: {swp_depth} pips."
             ))
+
+            if bullish_sweep:
+                ts_h = self.get_sweep_timestamp(bearish_sweep)
+                ts_l = self.get_sweep_timestamp(bullish_sweep)
+                conditions.append(ConditionStatus(
+                    condition="Dual Sweep Recency Resolution",
+                    satisfied=True,
+                    evidence=f"Recent High sweep ({ts_h.isoformat()}) superseded earlier Low sweep ({ts_l.isoformat()}). Bearish direction prioritized."
+                ))
 
             conditions.append(ConditionStatus(
                 condition="Judas Swing Exhaustion Bar Confirmed",
@@ -226,15 +452,16 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             ))
 
             has_mss = bearish_mss is not None
+            broken_sw_p = (bearish_mss.get("broken_swing_price", "N/A") if isinstance(bearish_mss, dict) else getattr(bearish_mss, "broken_swing_price", "N/A")) if has_mss else "N/A"
             conditions.append(ConditionStatus(
                 condition="Displacement & Market Structure Shift (MSS Bearish)",
                 satisfied=has_mss,
-                evidence=f"Broken swing low at {bearish_mss.get('broken_swing_price', 'N/A')}" if has_mss else "Awaiting lower timeframe swing low break."
+                evidence=f"Broken swing low at {broken_sw_p}" if has_mss else "Awaiting lower timeframe swing low break."
             ))
 
             has_fvg = bearish_fvg is not None
-            fvg_top = float(bearish_fvg.get("top_price", 0.0)) if bearish_fvg else 0.0
-            fvg_bot = float(bearish_fvg.get("bottom_price", 0.0)) if bearish_fvg else 0.0
+            fvg_top = float(bearish_fvg.get("top_price", 0.0) if isinstance(bearish_fvg, dict) else getattr(bearish_fvg, "top_price", 0.0)) if has_fvg else 0.0
+            fvg_bot = float(bearish_fvg.get("bottom_price", 0.0) if isinstance(bearish_fvg, dict) else getattr(bearish_fvg, "bottom_price", 0.0)) if has_fvg else 0.0
             fvg_mid = round((fvg_top + fvg_bot) / 2.0, 2) if has_fvg else current_price
             conditions.append(ConditionStatus(
                 condition="Fair Value Gap (FVG) Retest Zone Formed",
@@ -244,56 +471,99 @@ class DeterministicAIProvider(IAIAnalysisProvider):
 
             # Stop loss with dynamic ATR buffer
             sl_price = round(extreme + sl_buffer, 2)
-            risk_dist = abs(sl_price - fvg_mid)
+            risk_dist = round(sl_price - fvg_mid, 2)
 
             # 3-Tier Take Profit Targets (Scale & Trail)
             tp1_price = round(fvg_mid - (1.5 * risk_dist), 2)
             opposing_low = asian_levels.get("low") or london_levels.get("low") or pdl
-            if opposing_low and opposing_low < fvg_mid:
+            cand_tp = market_context.get("candidate_take_profit")
+            if cand_tp is not None:
+                tp2_price = round(float(cand_tp), 2)
+            elif opposing_low and opposing_low < fvg_mid:
                 tp2_price = round(opposing_low, 2)
             else:
                 tp2_price = round(fvg_mid - (3.5 * risk_dist), 2)
             tp3_price = round(fvg_mid - (5.0 * risk_dist), 2)
 
-            reward_dist = abs(fvg_mid - tp2_price)
-            rr_ratio = round(reward_dist / (risk_dist if risk_dist > 0 else 1.0), 2)
+            # Centralized Trade Geometry and Directional R:R Validation
+            geom = self.validate_trade_geometry(
+                action="SELL LIMIT",
+                entry_price=fvg_mid,
+                stop_loss=sl_price,
+                take_profit=tp2_price,
+            )
 
-            conditions.append(ConditionStatus(
-                condition="Risk-to-Reward Ratio >= 1:2",
-                satisfied=rr_ratio >= 1.8,
-                evidence=f"Target R:R is {rr_ratio}:1 (Entry: {fvg_mid:.2f}, SL: {sl_price:.2f}, TP2: {tp2_price:.2f})"
-            ))
+            if not geom["valid"]:
+                logger.warning(
+                    f"Trade geometry invalid: action=SELL LIMIT, entry={fvg_mid:.2f}, "
+                    f"stop_loss={sl_price:.2f}, take_profit={tp2_price:.2f}, "
+                    f"expected=TP < Entry < SL. Reason: {geom['reason']}"
+                )
+                conditions.append(ConditionStatus(
+                    condition="Trade Geometry Valid (TP < Entry < SL)",
+                    satisfied=False,
+                    evidence=f"Trade geometry invalid: action=SELL LIMIT, entry={fvg_mid:.2f}, stop_loss={sl_price:.2f}, take_profit={tp2_price:.2f}, expected=TP < Entry < SL. Reason: {geom['reason']}"
+                ))
+                conditions.append(ConditionStatus(
+                    condition="Risk-to-Reward Ratio >= 1:2",
+                    satisfied=False,
+                    evidence=f"R:R calculation blocked due to invalid geometry: {geom['reason']}"
+                ))
+            else:
+                rr_ratio = geom["rr_ratio"]
+                conditions.append(ConditionStatus(
+                    condition="Trade Geometry Valid (TP < Entry < SL)",
+                    satisfied=True,
+                    evidence=f"Valid SHORT geometry: TP2 ({tp2_price:.2f}) < Entry ({fvg_mid:.2f}) < SL ({sl_price:.2f})"
+                ))
+                conditions.append(ConditionStatus(
+                    condition="Risk-to-Reward Ratio >= 1:2",
+                    satisfied=rr_ratio >= 1.8,
+                    evidence=f"Target directional R:R is {rr_ratio}:1 (Entry: {fvg_mid:.2f}, SL: {sl_price:.2f}, TP2: {tp2_price:.2f})"
+                ))
 
-            if has_mss and has_fvg and is_exhaustion and rr_ratio >= 1.8:
-                trade_proposal = {
-                    "action": "SELL LIMIT",
-                    "entry": fvg_mid,
-                    "stop_loss": sl_price,
-                    "take_profit": tp2_price,
-                    "tp1": tp1_price,
-                    "tp2": tp2_price,
-                    "tp3": tp3_price,
-                    "rr_ratio": rr_ratio,
-                    "bias": "BEARISH",
-                    "sweep_level": lvl_name,
-                    "model": "London 3-Step / NY Judas Reversal",
-                    "setup_grade": setup_grade,
-                    "killzone": kz_name,
-                    "sl_buffer_pips": round(buffer_pips, 1),
-                }
+                if has_mss and has_fvg and is_exhaustion and rr_ratio >= 1.8:
+                    trade_proposal = {
+                        "action": "SELL LIMIT",
+                        "entry": fvg_mid,
+                        "stop_loss": sl_price,
+                        "take_profit": tp2_price,
+                        "tp1": tp1_price,
+                        "tp2": tp2_price,
+                        "tp3": tp3_price,
+                        "rr_ratio": rr_ratio,
+                        "risk_distance": geom["risk_distance"],
+                        "reward_distance": geom["reward_distance"],
+                        "bias": "BEARISH",
+                        "sweep_level": lvl_name,
+                        "model": "London 3-Step / NY Judas Reversal",
+                        "setup_grade": setup_grade,
+                        "killzone": kz_name,
+                        "sl_buffer_pips": round(buffer_pips, 1),
+                    }
 
         # B. Bullish Reversal Setup (SSL Swept -> Judas Exhaustion -> MSS Bullish -> Bullish FVG Retest)
-        elif bullish_sweep is not None:
-            lvl_name = bullish_sweep.get("level_type", "KEY_LOW")
-            extreme = float(bullish_sweep.get("extreme_price", current_price))
-            wick_ratio = float(bullish_sweep.get("rejection_wick_ratio", 0.0))
-            is_exhaustion = bool(bullish_sweep.get("is_exhaustion_candle", wick_ratio >= 0.35))
+        elif candidate_scenario == "BULLISH":
+            lvl_name = bullish_sweep.get("level_type", "KEY_LOW") if isinstance(bullish_sweep, dict) else getattr(bullish_sweep, "level_type", "KEY_LOW")
+            extreme = float(bullish_sweep.get("extreme_price", current_price) if isinstance(bullish_sweep, dict) else getattr(bullish_sweep, "extreme_price", current_price))
+            wick_ratio = float(bullish_sweep.get("rejection_wick_ratio", 0.0) if isinstance(bullish_sweep, dict) else getattr(bullish_sweep, "rejection_wick_ratio", 0.0))
+            is_exhaustion = bool(bullish_sweep.get("is_exhaustion_candle", wick_ratio >= 0.35) if isinstance(bullish_sweep, dict) else getattr(bullish_sweep, "is_exhaustion_candle", wick_ratio >= 0.35))
+            swp_depth = bullish_sweep.get("sweep_depth_pips", 0) if isinstance(bullish_sweep, dict) else getattr(bullish_sweep, "sweep_depth_pips", 0)
 
             conditions.append(ConditionStatus(
                 condition=f"Sell-Side Liquidity Swept ({lvl_name})",
                 satisfied=True,
-                evidence=f"Wick trough at {extreme:.2f} and closed inside. Depth: {bullish_sweep.get('sweep_depth_pips', 0)} pips."
+                evidence=f"Wick trough at {extreme:.2f} and closed inside. Depth: {swp_depth} pips."
             ))
+
+            if bearish_sweep:
+                ts_h = self.get_sweep_timestamp(bearish_sweep)
+                ts_l = self.get_sweep_timestamp(bullish_sweep)
+                conditions.append(ConditionStatus(
+                    condition="Dual Sweep Recency Resolution",
+                    satisfied=True,
+                    evidence=f"Recent Low sweep ({ts_l.isoformat()}) superseded earlier High sweep ({ts_h.isoformat()}). Bullish direction prioritized."
+                ))
 
             conditions.append(ConditionStatus(
                 condition="Judas Swing Exhaustion Bar Confirmed",
@@ -306,15 +576,16 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             ))
 
             has_mss = bullish_mss is not None
+            broken_sw_p = (bullish_mss.get("broken_swing_price", "N/A") if isinstance(bullish_mss, dict) else getattr(bullish_mss, "broken_swing_price", "N/A")) if has_mss else "N/A"
             conditions.append(ConditionStatus(
                 condition="Displacement & Market Structure Shift (MSS Bullish)",
                 satisfied=has_mss,
-                evidence=f"Broken swing high at {bullish_mss.get('broken_swing_price', 'N/A')}" if has_mss else "Awaiting lower timeframe swing high break."
+                evidence=f"Broken swing high at {broken_sw_p}" if has_mss else "Awaiting lower timeframe swing high break."
             ))
 
             has_fvg = bullish_fvg is not None
-            fvg_top = float(bullish_fvg.get("top_price", 0.0)) if bullish_fvg else 0.0
-            fvg_bot = float(bullish_fvg.get("bottom_price", 0.0)) if bullish_fvg else 0.0
+            fvg_top = float(bullish_fvg.get("top_price", 0.0) if isinstance(bullish_fvg, dict) else getattr(bullish_fvg, "top_price", 0.0)) if has_fvg else 0.0
+            fvg_bot = float(bullish_fvg.get("bottom_price", 0.0) if isinstance(bullish_fvg, dict) else getattr(bullish_fvg, "bottom_price", 0.0)) if has_fvg else 0.0
             fvg_mid = round((fvg_top + fvg_bot) / 2.0, 2) if has_fvg else current_price
             conditions.append(ConditionStatus(
                 condition="Fair Value Gap (FVG) Retest Zone Formed",
@@ -324,43 +595,76 @@ class DeterministicAIProvider(IAIAnalysisProvider):
 
             # Stop loss with dynamic ATR buffer
             sl_price = round(extreme - sl_buffer, 2)
-            risk_dist = abs(fvg_mid - sl_price)
+            risk_dist = round(fvg_mid - sl_price, 2)
 
             # 3-Tier Take Profit Targets (Scale & Trail)
             tp1_price = round(fvg_mid + (1.5 * risk_dist), 2)
             opposing_high = asian_levels.get("high") or london_levels.get("high") or pdh
-            if opposing_high and opposing_high > fvg_mid:
+            cand_tp = market_context.get("candidate_take_profit")
+            if cand_tp is not None:
+                tp2_price = round(float(cand_tp), 2)
+            elif opposing_high and opposing_high > fvg_mid:
                 tp2_price = round(opposing_high, 2)
             else:
                 tp2_price = round(fvg_mid + (3.5 * risk_dist), 2)
             tp3_price = round(fvg_mid + (5.0 * risk_dist), 2)
 
-            reward_dist = abs(tp2_price - fvg_mid)
-            rr_ratio = round(reward_dist / (risk_dist if risk_dist > 0 else 1.0), 2)
+            # Centralized Trade Geometry and Directional R:R Validation
+            geom = self.validate_trade_geometry(
+                action="BUY LIMIT",
+                entry_price=fvg_mid,
+                stop_loss=sl_price,
+                take_profit=tp2_price,
+            )
 
-            conditions.append(ConditionStatus(
-                condition="Risk-to-Reward Ratio >= 1:2",
-                satisfied=rr_ratio >= 1.8,
-                evidence=f"Target R:R is {rr_ratio}:1 (Entry: {fvg_mid:.2f}, SL: {sl_price:.2f}, TP2: {tp2_price:.2f})"
-            ))
+            if not geom["valid"]:
+                logger.warning(
+                    f"Trade geometry invalid: action=BUY LIMIT, entry={fvg_mid:.2f}, "
+                    f"stop_loss={sl_price:.2f}, take_profit={tp2_price:.2f}, "
+                    f"expected=SL < Entry < TP. Reason: {geom['reason']}"
+                )
+                conditions.append(ConditionStatus(
+                    condition="Trade Geometry Valid (SL < Entry < TP)",
+                    satisfied=False,
+                    evidence=f"Trade geometry invalid: action=BUY LIMIT, entry={fvg_mid:.2f}, stop_loss={sl_price:.2f}, take_profit={tp2_price:.2f}, expected=SL < Entry < TP. Reason: {geom['reason']}"
+                ))
+                conditions.append(ConditionStatus(
+                    condition="Risk-to-Reward Ratio >= 1:2",
+                    satisfied=False,
+                    evidence=f"R:R calculation blocked due to invalid geometry: {geom['reason']}"
+                ))
+            else:
+                rr_ratio = geom["rr_ratio"]
+                conditions.append(ConditionStatus(
+                    condition="Trade Geometry Valid (SL < Entry < TP)",
+                    satisfied=True,
+                    evidence=f"Valid LONG geometry: SL ({sl_price:.2f}) < Entry ({fvg_mid:.2f}) < TP2 ({tp2_price:.2f})"
+                ))
+                conditions.append(ConditionStatus(
+                    condition="Risk-to-Reward Ratio >= 1:2",
+                    satisfied=rr_ratio >= 1.8,
+                    evidence=f"Target directional R:R is {rr_ratio}:1 (Entry: {fvg_mid:.2f}, SL: {sl_price:.2f}, TP2: {tp2_price:.2f})"
+                ))
 
-            if has_mss and has_fvg and is_exhaustion and rr_ratio >= 1.8:
-                trade_proposal = {
-                    "action": "BUY LIMIT",
-                    "entry": fvg_mid,
-                    "stop_loss": sl_price,
-                    "take_profit": tp2_price,
-                    "tp1": tp1_price,
-                    "tp2": tp2_price,
-                    "tp3": tp3_price,
-                    "rr_ratio": rr_ratio,
-                    "bias": "BULLISH",
-                    "sweep_level": lvl_name,
-                    "model": "London 3-Step / NY Judas Reversal",
-                    "setup_grade": setup_grade,
-                    "killzone": kz_name,
-                    "sl_buffer_pips": round(buffer_pips, 1),
-                }
+                if has_mss and has_fvg and is_exhaustion and rr_ratio >= 1.8:
+                    trade_proposal = {
+                        "action": "BUY LIMIT",
+                        "entry": fvg_mid,
+                        "stop_loss": sl_price,
+                        "take_profit": tp2_price,
+                        "tp1": tp1_price,
+                        "tp2": tp2_price,
+                        "tp3": tp3_price,
+                        "rr_ratio": rr_ratio,
+                        "risk_distance": geom["risk_distance"],
+                        "reward_distance": geom["reward_distance"],
+                        "bias": "BULLISH",
+                        "sweep_level": lvl_name,
+                        "model": "London 3-Step / NY Judas Reversal",
+                        "setup_grade": setup_grade,
+                        "killzone": kz_name,
+                        "sl_buffer_pips": round(buffer_pips, 1),
+                    }
 
         # C. If no sweep has completed yet, check proximity to key session boundaries
         else:
@@ -404,6 +708,24 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             ))
 
         # -------------------------------------------------------------
+        # Safety Gate: Double Check Trade Geometry Before VALID_SETUP
+        # -------------------------------------------------------------
+        if trade_proposal:
+            gate = self.validate_trade_geometry(
+                action=trade_proposal["action"],
+                entry_price=trade_proposal["entry"],
+                stop_loss=trade_proposal["stop_loss"],
+                take_profit=trade_proposal["take_profit"],
+            )
+            if not gate["valid"] or gate["rr_ratio"] < 1.8:
+                logger.error(
+                    f"CRITICAL SAFETY GATE: Rejected invalid setup for {symbol}: action={trade_proposal['action']}, "
+                    f"entry={trade_proposal['entry']}, sl={trade_proposal['stop_loss']}, tp={trade_proposal['take_profit']}. "
+                    f"Reason: {gate['reason']}"
+                )
+                trade_proposal = None
+
+        # -------------------------------------------------------------
         # Determine State & Rich Actionable Summary
         # -------------------------------------------------------------
         satisfied_count = sum(1 for c in conditions if c.satisfied)
@@ -438,22 +760,40 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             )
         elif (bearish_sweep or bullish_sweep):
             state = AnalysisStateEnum.POTENTIAL_SETUP
-            swp = bearish_sweep or bullish_sweep
-            swp_name = swp.get("level_type", "KEY_LEVEL")
-            extreme = swp.get("extreme_price", current_price)
-            wick_r = float(swp.get("rejection_wick_ratio", 0.0))
-            if wick_r < 0.35:
+            invalid_geom_cond = next((c for c in conditions if "Trade Geometry Valid" in c.condition and not c.satisfied), None)
+            
+            if invalid_geom_cond:
                 summary = (
-                    f"⚠️ POTENTIAL SETUP: {symbol} probed {swp_name} at {extreme:.2f}. "
-                    f"Judas swing in progress (wick {wick_r * 100:.0f}% < 35%). Awaiting closed exhaustion rejection bar."
+                    f"⚠️ POTENTIAL SETUP: {symbol} candidate setup rejected due to invalid trade geometry. "
+                    f"{invalid_geom_cond.evidence}"
                 )
-                confidence_notes = "Stage 1 (Liquidity Sweep) in progress. Filtering premature entry until Judas bar closes."
+                confidence_notes = (
+                    f"Trade geometry validation failed: {invalid_geom_cond.evidence}. "
+                    "Entry/SL/TP order must strictly satisfy directional constraints."
+                )
+            elif candidate_scenario == "CONFLICT":
+                summary = (
+                    f"⚠️ POTENTIAL SETUP: {symbol} dual sweep conflict detected. "
+                    "Conflicting High and Low sweeps without clear directional displacement."
+                )
+                confidence_notes = "Dual sweep conflict: Both High and Low purged without unified MSS. Awaiting directional expansion."
             else:
-                summary = (
-                    f"⚠️ POTENTIAL SETUP: {symbol} swept {swp_name} at {extreme:.2f} (Judas Exhaustion Confirmed). "
-                    f"Liquidity purged. Awaiting lower-timeframe displacement MSS and FVG creation."
-                )
-                confidence_notes = "Stage 1 & Exhaustion confirmed. Monitoring for Stage 2 (Displacement MSS)."
+                swp = bearish_sweep if candidate_scenario == "BEARISH" else (bullish_sweep if candidate_scenario == "BULLISH" else (bearish_sweep or bullish_sweep))
+                swp_name = swp.get("level_type", "KEY_LEVEL") if isinstance(swp, dict) else getattr(swp, "level_type", "KEY_LEVEL")
+                extreme = float(swp.get("extreme_price", current_price) if isinstance(swp, dict) else getattr(swp, "extreme_price", current_price))
+                wick_r = float(swp.get("rejection_wick_ratio", 0.0) if isinstance(swp, dict) else getattr(swp, "rejection_wick_ratio", 0.0))
+                if wick_r < 0.35:
+                    summary = (
+                        f"⚠️ POTENTIAL SETUP: {symbol} probed {swp_name} at {extreme:.2f}. "
+                        f"Judas swing in progress (wick {wick_r * 100:.0f}% < 35%). Awaiting closed exhaustion rejection bar."
+                    )
+                    confidence_notes = "Stage 1 (Liquidity Sweep) in progress. Filtering premature entry until Judas bar closes."
+                else:
+                    summary = (
+                        f"⚠️ POTENTIAL SETUP: {symbol} swept {swp_name} at {extreme:.2f} (Judas Exhaustion Confirmed). "
+                        f"Liquidity purged. Awaiting lower-timeframe displacement MSS and FVG creation."
+                    )
+                    confidence_notes = "Stage 1 & Exhaustion confirmed. Monitoring for Stage 2 (Displacement MSS)."
         elif any("probing" in c.evidence.lower() for c in conditions):
             state = AnalysisStateEnum.POTENTIAL_SETUP
             summary = f"⚠️ POTENTIAL SETUP: {symbol} is probing key session liquidity boundary. Monitoring for manipulation wick."
