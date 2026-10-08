@@ -22,11 +22,22 @@ An institutional-grade, full-stack **Forex & Synthetic Indices AI Market Analysi
    - [Step 4: Backend Configuration & Local Run](#step-4-backend-configuration--local-run)
    - [Step 5: Database Setup & Migrations](#step-5-database-setup--migrations)
    - [Step 6: Frontend (Flutter) Configuration & Run](#step-6-frontend-flutter-configuration--run)
-6. [Cloud Deployment (Railway & Render)](#-cloud-deployment-railway--render)
+6. [Advanced FCM & Android Notification System (Complete Blueprint)](#-advanced-fcm--android-notification-system-complete-blueprint)
+   - [Notification Subsystem Architecture](#1-notification-subsystem-architecture)
+   - [Frontend FCM File Matrix](#2-frontend-fcm-file-matrix)
+   - [Component 1: Custom Vector Candlestick Icon (`ic_stat_notification.xml`)](#component-1-custom-vector-candlestick-icon-ic_stat_notificationxml)
+   - [Component 2: Emerald Notification Accent Color (`colors.xml`)](#component-2-emerald-notification-accent-color-colorsxml)
+   - [Component 3: Android Gradle Configuration (`build.gradle.kts`)](#component-3-android-gradle-configuration-buildgradlekts)
+   - [Component 4: Android Manifest Permissions & Channel Metadata](#component-4-android-manifest-permissions--channel-metadata)
+   - [Component 5: Flutter FCM Initialization & Background Handler](#component-5-flutter-fcm-initialization--background-handler)
+   - [Component 6: Deep-Linking & Click Routing to Trade Tickets](#component-6-deep-linking--click-routing-to-trade-tickets)
+   - [Component 7: Foreground Trading Alert Banner](#component-7-foreground-trading-alert-banner)
+   - [Component 8: Backend High-Priority Dispatch Pairing](#component-8-backend-high-priority-dispatch-pairing)
+7. [Cloud Deployment (Railway & Render)](#-cloud-deployment-railway--render)
    - [Deploying to Railway](#deploying-to-railway)
    - [Deploying to Render](#deploying-to-render)
-7. [API Reference & Testing Checklist](#-api-reference--testing-checklist)
-8. [Troubleshooting & FAQs](#-troubleshooting--faqs)
+8. [API Reference & Testing Checklist](#-api-reference--testing-checklist)
+9. [Troubleshooting & FAQs](#-troubleshooting--faqs)
 
 ---
 
@@ -416,6 +427,467 @@ flutter devices
 
 # Run in debug mode
 flutter run
+```
+
+---
+
+## 🔔 Advanced FCM & Android Notification System (Complete Blueprint)
+
+Trading setups and market volatility alerts are time-critical. Standard push notifications often fail institutional trading requirements because:
+1. **The "White Square" Icon Bug**: On Android 5.0+ (API 21+), Android forces status bar notification icons to be rendered as an alpha-channel mask. If a standard full-color PNG app icon is used, the OS renders it as a solid, broken white square.
+2. **Missing Notification Channels**: Modern Android (API 26+) silences notifications unless they are explicitly assigned to a high-importance notification channel with sound, vibration, and heads-up popups enabled.
+3. **App State Loss**: Clicking a notification while the app is closed (terminated) often just opens the home screen instead of deep-linking directly into the active Trade Ticket.
+4. **Foreground Invisibility**: By default in Flutter, Firebase Cloud Messaging does not show alerts when the app is actively open in the foreground.
+
+This platform implements an end-to-end, institutional notification architecture resolving every one of these challenges.
+
+---
+
+### 1. Notification Subsystem Architecture
+
+```
+[ Backend Trade Scanner (45s) ]
+               │
+               ▼  (High-Priority FCM Message + Custom Payload)
+[ Google Firebase Cloud Messaging (FCM) ]
+               │
+               ├── Android OS System Tray
+               │     ├── Displays: Custom Candlestick Vector Icon (ic_stat_notification.xml)
+               │     ├── Tints: Emerald Accent Color (#10B981)
+               │     └── Channels: 'forex_ai_alerts' (High Importance, Sound, Vibrate)
+               │
+               ▼
+   [ Flutter Client State Handler ]
+         │
+         ├── Terminated (App Closed)  ──▶ FirebaseMessaging.getInitialMessage() ──▶ Jump to Trade Ticket
+         ├── Background (App Minimized) ──▶ onMessageOpenedApp.listen()          ──▶ Jump to Trade Ticket
+         └── Foreground (App Open)      ──▶ onMessage.listen()                  ──▶ Floating Alert Banner
+```
+
+---
+
+### 2. Frontend FCM File Matrix
+
+To recreate this notification system in any Flutter app, the following 9 files work together:
+
+| File Path | Role & Purpose |
+| :--- | :--- |
+| [`frontend/pubspec.yaml`](file:///c:/Users/lenovo/.gemini/antigravity-ide/scratch/forex-ai-platform/frontend/pubspec.yaml) | Imports `firebase_core`, `firebase_messaging`, and `flutter_local_notifications`. |
+| [`frontend/android/build.gradle.kts`](file:///c:/Users/lenovo/.gemini/antigravity-ide/scratch/forex-ai-platform/frontend/android/build.gradle.kts) | Registers Google Services Gradle Classpath (`com.google.gms:google-services:4.4.2`). |
+| [`frontend/android/app/build.gradle.kts`](file:///c:/Users/lenovo/.gemini/antigravity-ide/scratch/forex-ai-platform/frontend/android/app/build.gradle.kts) | Applies the `com.google.gms.google-services` plugin and sets the application ID. |
+| [`frontend/android/app/google-services.json`](file:///c:/Users/lenovo/.gemini/antigravity-ide/scratch/forex-ai-platform/frontend/android/app/google-services.json) | Firebase configuration linking the Android app to your Firebase Cloud project. |
+| [`frontend/android/app/src/main/res/drawable/ic_stat_notification.xml`](file:///c:/Users/lenovo/.gemini/antigravity-ide/scratch/forex-ai-platform/frontend/android/app/src/main/res/drawable/ic_stat_notification.xml) | Monochrome vector silhouette of 3 candlesticks and an AI signal star. |
+| [`frontend/android/app/src/main/res/values/colors.xml`](file:///c:/Users/lenovo/.gemini/antigravity-ide/scratch/forex-ai-platform/frontend/android/app/src/main/res/values/colors.xml) | Defines `#10B981` (Emerald accent color) used by Android to tint notification headers. |
+| [`frontend/android/app/src/main/AndroidManifest.xml`](file:///c:/Users/lenovo/.gemini/antigravity-ide/scratch/forex-ai-platform/frontend/android/app/src/main/AndroidManifest.xml) | Declares notification permissions, metadata tags for default icon, color, and channel. |
+| [`frontend/lib/main.dart`](file:///c:/Users/lenovo/.gemini/antigravity-ide/scratch/forex-ai-platform/frontend/lib/main.dart) | Background isolate handler, runtime permissions, FCM token registration, and deep-link routing. |
+| [`frontend/lib/services/api_service.dart`](file:///c:/Users/lenovo/.gemini/antigravity-ide/scratch/forex-ai-platform/frontend/lib/services/api_service.dart) | Sends the extracted FCM token to `POST /api/v1/notifications/devices`. |
+
+---
+
+### Component 1: Custom Vector Candlestick Icon (`ic_stat_notification.xml`)
+
+> **Crucial Rule**: Android status bar icons **must be pure white (`#FFFFFFFF`) on a transparent background**. Android ignores all color channels in status bar icons and uses the shape strictly as an alpha transparency mask.
+
+Create the file at:
+`frontend/android/app/src/main/res/drawable/ic_stat_notification.xml`
+
+```xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Left Candlestick -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M4,9h3v7H4z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M5,6h1v3H5z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M5,16h1v3H5z"/>
+
+    <!-- Middle Candlestick (Bullish Expansion) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M10,6h3v10h-3z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M11,3h1v3h-1z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M11,16h1v4h-1z"/>
+
+    <!-- Right Candlestick (Breakout) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M16,4h3v9h-3z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M17,1h1v3h-1z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M17,13h1v5h-1z"/>
+
+    <!-- AI Signal Star (Top Right Confluence Sparkle) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M21.5,1.5l0.7,1.4 1.5,0.7 -1.5,0.7 -0.7,1.5 -0.7,-1.5 -1.5,-0.7 1.5,-0.7z"/>
+</vector>
+```
+
+---
+
+### Component 2: Emerald Notification Accent Color (`colors.xml`)
+
+Android applies this color to the small circular background behind your icon, the app name title text, and the interactive action buttons in the notification drawer.
+
+Create the file at:
+`frontend/android/app/src/main/res/values/colors.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Institutional Emerald Accent Token -->
+    <color name="notification_accent">#10B981</color>
+</resources>
+```
+
+---
+
+### Component 3: Android Gradle Configuration (`build.gradle.kts`)
+
+#### Root Gradle: `frontend/android/build.gradle.kts`
+Add the Google Services classpath inside the `buildscript` block:
+
+```kotlin
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.google.gms:google-services:4.4.2")
+    }
+}
+```
+
+#### App Gradle: `frontend/android/app/build.gradle.kts`
+Apply the plugin in the `plugins` block:
+
+```kotlin
+plugins {
+    id("com.android.application")
+    id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services") // <-- Must be applied here
+}
+
+android {
+    namespace = "com.forexai.platform.frontend"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    defaultConfig {
+        applicationId = "com.forexai.platform.frontend"
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+}
+```
+
+---
+
+### Component 4: Android Manifest Permissions & Channel Metadata
+
+Edit `frontend/android/app/src/main/AndroidManifest.xml`:
+
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Essential Network & Notification Permissions -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/> <!-- Android 13+ (API 33+) -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
+    <application
+        android:label="Forex AI"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+
+        <!-- 1. Default Notification Channel ID -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="forex_ai_alerts" />
+
+        <!-- 2. Custom Silhouette Notification Icon -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_notification" />
+
+        <!-- 3. Custom Emerald Accent Tint -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_accent" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop" <!-- Ensures single instance on notification click -->
+            ...>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+```
+
+---
+
+### Component 5: Flutter FCM Initialization & Background Handler
+
+Inside `frontend/lib/main.dart`:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'services/api_service.dart';
+
+// 1. MUST be a top-level function outside any class with @pragma entry-point
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint('Background FCM received: ${message.messageId}');
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase SDK
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    debugPrint('Firebase initialization notice: $e');
+  }
+
+  runApp(const ForexAIApp());
+  _initFCM();
+}
+
+Future<void> _initFCM() async {
+  try {
+    final messaging = FirebaseMessaging.instance;
+
+    // Request permissions for Android 13+ and iOS
+    await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      provisional: false,
+    );
+
+    // Enable heads-up alerts while the app is in the foreground
+    await messaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // Retrieve unique FCM device token & register with backend
+    final token = await messaging.getToken();
+    if (token != null) {
+      debugPrint('FCM Token: $token');
+      await ApiService.registerDevice(fcmToken: token, platform: 'android');
+    }
+
+    // Subscribe to macroeconomic event broadcasts
+    await messaging.subscribeToTopic('economic_events');
+
+    // Handle token rotation automatically
+    messaging.onTokenRefresh.listen((newToken) {
+      ApiService.registerDevice(fcmToken: newToken, platform: 'android');
+    });
+
+    // Wire up lifecycle click listeners
+    _setupNotificationClickListeners(messaging);
+  } catch (e) {
+    debugPrint('FCM init error: $e');
+  }
+}
+```
+
+---
+
+### Component 6: Deep-Linking & Click Routing to Trade Tickets
+
+When a trader taps an alert, they must immediately land on the relevant asset's Trade Ticket or Macro Event.
+
+```dart
+void _setupNotificationClickListeners(FirebaseMessaging messaging) {
+  // Case A: App was completely CLOSED (Terminated)
+  messaging.getInitialMessage().then((message) {
+    if (message != null) {
+      Future.delayed(const Duration(milliseconds: 600), () {
+        _handleNotificationOpen(message);
+      });
+    }
+  });
+
+  // Case B: App was in the BACKGROUND (Minimized)
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    _handleNotificationOpen(message);
+  });
+}
+
+void _handleNotificationOpen(RemoteMessage? message) {
+  if (message == null) return;
+  
+  final type = message.data['type']?.toString();
+  final screen = message.data['screen']?.toString();
+
+  // 1. Economic Event Navigation
+  if (type == 'ECONOMIC_EVENT_UPCOMING' || screen == 'news') {
+    final eventId = message.data['event_id']?.toString();
+    shellKey.currentState?.navigateToNews(eventId);
+    return;
+  }
+
+  // 2. Direct Trade Ticket Navigation by Symbol
+  final symbol = message.data['symbol']?.toString();
+  if (symbol != null && symbol.isNotEmpty) {
+    shellKey.currentState?.navigateToAnalysis(symbol);
+    return;
+  }
+
+  // 3. Fallback title/body scanner for known instruments
+  final text = '${message.notification?.title ?? ''} ${message.notification?.body ?? ''}'.toUpperCase();
+  for (final s in ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'R_75', 'BOOM1000']) {
+    if (text.contains(s)) {
+      shellKey.currentState?.navigateToAnalysis(s);
+      return;
+    }
+  }
+}
+```
+
+---
+
+### Component 7: Foreground Trading Alert Banner
+
+When the trader has the app actively open, `FirebaseMessaging.onMessage.listen` intercepts the notification and displays an institutional trading banner at the top of the screen:
+
+```dart
+FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+  final ctx = navigatorKey.currentContext;
+  if (ctx == null || !ctx.mounted) return;
+
+  final title = message.notification?.title ?? message.data['title'] ?? 'AI Market Alert';
+  final body = message.notification?.body ?? message.data['body'] ?? '';
+  final symbol = message.data['symbol']?.toString();
+  final isBuy = message.data['action']?.toString().toUpperCase().contains('BUY') ?? false;
+
+  ScaffoldMessenger.of(ctx).showSnackBar(
+    SnackBar(
+      backgroundColor: const Color(0xFF0F172A), // Dark slate
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.all(12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: isBuy ? const Color(0xFF10B981) : const Color(0xFFF43F5E), // Emerald or Rose
+          width: 1.5,
+        ),
+      ),
+      content: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: (isBuy ? const Color(0xFF10B981) : const Color(0xFFF43F5E)).withOpacity(0.2),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              isBuy ? 'BUY' : 'SELL',
+              style: TextStyle(
+                color: isBuy ? const Color(0xFF10B981) : const Color(0xFFF43F5E),
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                Text(body, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12), maxLines: 1),
+              ],
+            ),
+          ),
+          if (symbol != null)
+            TextButton(
+              onPressed: () {
+                ScaffoldMessenger.of(ctx).hideCurrentSnackBar();
+                shellKey.currentState?.navigateToAnalysis(symbol);
+              },
+              child: const Text('VIEW', style: TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold)),
+            ),
+        ],
+      ),
+    ),
+  );
+});
+```
+
+---
+
+### Component 8: Backend High-Priority Dispatch Pairing
+
+On the backend, [`backend/app/services/notifications/notification_service.py`](file:///c:/Users/lenovo/.gemini/antigravity-ide/scratch/forex-ai-platform/backend/app/services/notifications/notification_service.py) constructs the message matching the exact channel and styling configured in the Android app:
+
+```python
+from firebase_admin import messaging
+
+message = messaging.Message(
+    token=device_token,
+    notification=messaging.Notification(
+        title="XAUUSD | BUY LIMIT (Grade A+)",
+        body="Entry: 2650.50 | SL: 2642.10 | TP1: 2663.10 (+1.5R)"
+    ),
+    data={
+        "type": "TRADE_SETUP_GENERATED",
+        "symbol": "XAUUSD",
+        "action": "BUY LIMIT",
+        "entry_price": "2650.50",
+        "stop_loss": "2642.10",
+        "tp1": "2663.10",
+        "tp2": "2675.70",
+        "screen": "analysis",
+        "state": "VALID_SETUP"
+    },
+    android=messaging.AndroidConfig(
+        priority="high",
+        ttl=3600,
+        notification=messaging.AndroidNotification(
+            channel_id="forex_ai_high_importance", # High importance channel with sound & heads-up popup
+            icon="ic_stat_notification",           # References the vector candlestick drawable
+            color="#10B981",                       # Institutional emerald accent tint
+            sound="default",
+            default_vibrate_timings=True,
+        )
+    )
+)
+
+response = messaging.send(message)
 ```
 
 ---
