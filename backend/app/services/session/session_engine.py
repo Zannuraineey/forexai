@@ -1,5 +1,5 @@
 from datetime import datetime, time, date, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict
 from app.schemas.candle import CandleRead
