@@ -294,46 +294,35 @@ class _AlertsScreenState extends State<AlertsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Meta Line: 10:42 | XAUUSD | London
+                  // Top Meta Row: Symbol (left) & State Tag (right)
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Timestamp (10:42)
-                      Text(
-                        timeStr,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      // Symbol (XAUUSD)
-                      Text(
-                        item.symbol,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      // Session (London) - Expanded to fill available space safely
-                      Expanded(
-                        child: Text(
-                          item.session,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.textSecondary,
-                            fontWeight: FontWeight.w500,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            item.symbol,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.textPrimary,
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          Text(
+                            timeStr,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textMuted,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(width: 8),
-                      // Quiet state indicator tag - Flexible to prevent overflow
                       Flexible(
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -351,6 +340,26 @@ class _AlertsScreenState extends State<AlertsScreen> {
                               letterSpacing: 0.5,
                               color: stateColor,
                             ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  // Session Subtitle Line
+                  Row(
+                    children: [
+                      const Icon(Icons.schedule_rounded, size: 12, color: AppTheme.textMuted),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          item.session,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
