@@ -14,6 +14,37 @@ class AmbiguityItem(BaseModel):
     reason: str
     suggestion: Optional[str] = None
 
+class TradeTarget(BaseModel):
+    price: float
+    rr: float
+    action: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+class InvalidationRule(BaseModel):
+    expiry_minutes: int = 30
+    cancel_if_touched: Optional[float] = None
+    note: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class TradeSetup(BaseModel):
+    action: str  # "BUY LIMIT" or "SELL LIMIT"
+    entry_price: float
+    stop_loss: float
+    take_profit: float
+    risk_pips: float
+    targets: Dict[str, TradeTarget] = Field(default_factory=dict)
+    invalidation: InvalidationRule = Field(default_factory=InvalidationRule)
+    confluence: List[str] = Field(default_factory=list)
+    grade: Optional[str] = "Grade A"
+    session: Optional[str] = None
+    model: Optional[str] = None
+    rr_ratio: Optional[float] = None
+    sl_buffer_pips: Optional[float] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 class AIAnalysisOutput(BaseModel):
     state: AnalysisStateEnum = AnalysisStateEnum.NO_SETUP
     summary: str
@@ -21,6 +52,7 @@ class AIAnalysisOutput(BaseModel):
     ambiguities_detected: List[AmbiguityItem] = []
     confidence_notes: Optional[str] = None
     full_reasoning: Optional[str] = None
+    trade_setup: Optional[TradeSetup] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -47,6 +79,7 @@ class AnalysisRecordRead(BaseModel):
     condition_breakdown: List[ConditionStatus] = []
     ambiguities_detected: List[AmbiguityItem] = []
     full_reasoning: Optional[str] = None
+    trade_setup: Optional[TradeSetup] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -58,3 +91,4 @@ class AnalysisQueryFilter(BaseModel):
     state: Optional[AnalysisStateEnum] = None
     limit: int = 50
     offset: int = 0
+

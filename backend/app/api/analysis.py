@@ -12,7 +12,9 @@ from app.schemas.ai_analysis import (
     AnalysisRecordRead,
     ConditionStatus,
     AmbiguityItem,
+    TradeSetup,
 )
+from pydantic import BaseModel
 from app.services.ai import AIAnalysisEngine
 
 router = APIRouter(prefix="/analysis", tags=["AI Market Analysis"])
@@ -68,6 +70,7 @@ async def get_analysis_history(
         cb = [ConditionStatus(**c) if isinstance(c, dict) else c for c in (record.condition_breakdown or [])]
         amb = [AmbiguityItem(**a) if isinstance(a, dict) else a for a in (record.ambiguities_detected or [])]
 
+        ts = TradeSetup(**record.trade_setup) if (hasattr(record, "trade_setup") and record.trade_setup) else None
         output.append(
             AnalysisRecordRead(
                 id=record.id,
@@ -85,6 +88,7 @@ async def get_analysis_history(
                 condition_breakdown=cb,
                 ambiguities_detected=amb,
                 full_reasoning=record.full_reasoning,
+                trade_setup=ts,
                 created_at=record.created_at,
             )
         )
@@ -106,6 +110,48 @@ async def trigger_scanner_run():
     """
     from app.services.ai import get_session_scanner
     return await get_session_scanner().scan_cycle()
+
+class TradeLifecycleEventRequest(BaseModel):
+    symbol: str
+    event_type: str  # "ENTRY_FILLED", "TP1_HIT_MOVE_TO_BE", "TP2_HIT", "TP3_HIT", "SL_HIT", "SETUP_CANCELLED"
+    price: float
+    timeframe: str = "15m"
+    action: Optional[str] = None
+    details: Optional[str] = None
+    analysis_id: Optional[int] = None
+
+@router.post("/lifecycle-event")
+async def report_lifecycle_event(
+    event: TradeLifecycleEventRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Dispatches real-time actionable trade lifecycle milestone alerts to FCM devices:
+    - ENTRY_FILLED
+    - TP1_HIT_MOVE_TO_BE (Secures 40% partial & moves Stop Loss to Break-Even)
+    - TP2_HIT (40% at Key Liquidity)
+    - TP3_HIT (Runner concluded)
+    - SL_HIT (Controlled exit)
+    - SETUP_CANCELLED (Front-run expiry)
+    """
+    from app.services.notifications import NotificationService
+    notif_svc = NotificationService(db)
+    notif = await notif_svc.dispatch_trade_lifecycle_update(
+        symbol=event.symbol,
+        event_type=event.event_type,
+        price=event.price,
+        timeframe=event.timeframe,
+        action=event.action,
+        details=event.details,
+        analysis_id=event.analysis_id,
+    )
+    return {
+        "status": "success",
+        "event_type": event.event_type,
+        "notification_id": notif.id if notif else None,
+        "symbol": event.symbol,
+        "dispatched": notif is not None,
+    }
 
 @router.get("/{analysis_id}", response_model=AnalysisRecordRead)
 async def get_analysis_by_id(
@@ -132,6 +178,7 @@ async def get_analysis_by_id(
     cb = [ConditionStatus(**c) if isinstance(c, dict) else c for c in (record.condition_breakdown or [])]
     amb = [AmbiguityItem(**a) if isinstance(a, dict) else a for a in (record.ambiguities_detected or [])]
 
+    ts = TradeSetup(**record.trade_setup) if (hasattr(record, "trade_setup") and record.trade_setup) else None
     return AnalysisRecordRead(
         id=record.id,
         symbol=sym,
@@ -148,6 +195,7 @@ async def get_analysis_by_id(
         condition_breakdown=cb,
         ambiguities_detected=amb,
         full_reasoning=record.full_reasoning,
+        trade_setup=ts,
         created_at=record.created_at,
     )
 

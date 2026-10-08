@@ -41,6 +41,7 @@ class AnalysisResult(Base):
     condition_breakdown: Mapped[dict] = mapped_column(JSON, nullable=False, default=list)
     ambiguities_detected: Mapped[dict] = mapped_column(JSON, nullable=False, default=list)
     full_reasoning: Mapped[str] = mapped_column(Text, nullable=True)
+    trade_setup: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True, default=None)
     
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

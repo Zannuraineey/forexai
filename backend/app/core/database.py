@@ -79,6 +79,11 @@ async def init_db() -> None:
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            try:
+                from sqlalchemy import text
+                await conn.execute(text("ALTER TABLE analysis_results ADD COLUMN trade_setup JSON"))
+            except Exception:
+                pass  # Column already exists or table freshly created
         logger.info(f"Database tables initialized successfully using {engine.url.drivername}.")
     except Exception as exc:
         if "sqlite" not in str(engine.url):
@@ -91,6 +96,11 @@ async def init_db() -> None:
             async_session_factory.configure(bind=engine)
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                try:
+                    from sqlalchemy import text
+                    await conn.execute(text("ALTER TABLE analysis_results ADD COLUMN trade_setup JSON"))
+                except Exception:
+                    pass
             logger.info("Local SQLite database initialized and ready at ./forex_ai.db.")
         else:
             raise

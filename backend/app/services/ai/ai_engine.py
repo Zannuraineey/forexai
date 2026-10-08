@@ -14,6 +14,7 @@ from app.schemas.ai_analysis import (
     AnalysisRecordRead,
     ConditionStatus,
     AmbiguityItem,
+    TradeSetup,
 )
 from app.services.features.context_engine import MarketContextEngine, MarketContextSnapshot
 from app.services.session import SessionEngine
@@ -157,6 +158,7 @@ class AIAnalysisEngine:
 
         cond_dump = [c.model_dump() for c in ai_output.condition_breakdown]
         amb_dump = [a.model_dump() for a in ai_output.ambiguities_detected]
+        setup_dump = ai_output.trade_setup.model_dump() if ai_output.trade_setup else None
 
         if not record:
             record = AnalysisResult(
@@ -172,6 +174,7 @@ class AIAnalysisEngine:
                 condition_breakdown=cond_dump,
                 ambiguities_detected=amb_dump,
                 full_reasoning=ai_output.full_reasoning,
+                trade_setup=setup_dump,
                 created_at=datetime.now(timezone.utc),
             )
             self.db.add(record)
@@ -181,6 +184,7 @@ class AIAnalysisEngine:
             record.condition_breakdown = cond_dump
             record.ambiguities_detected = amb_dump
             record.full_reasoning = ai_output.full_reasoning
+            record.trade_setup = setup_dump
             record.model_version = model_version
 
         await self.db.commit()
@@ -202,5 +206,6 @@ class AIAnalysisEngine:
             condition_breakdown=ai_output.condition_breakdown,
             ambiguities_detected=ai_output.ambiguities_detected,
             full_reasoning=record.full_reasoning,
+            trade_setup=ai_output.trade_setup,
             created_at=record.created_at,
         )

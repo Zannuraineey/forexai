@@ -3,7 +3,14 @@ import re
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from app.core.logging import logger
-from app.schemas.ai_analysis import AIAnalysisOutput, ConditionStatus, AmbiguityItem
+from app.schemas.ai_analysis import (
+    AIAnalysisOutput,
+    ConditionStatus,
+    AmbiguityItem,
+    TradeSetup,
+    TradeTarget,
+    InvalidationRule,
+)
 from app.models.analysis import AnalysisStateEnum
 from app.services.ai.provider_interface import IAIAnalysisProvider
 from app.services.session import SessionEngine
@@ -731,6 +738,7 @@ class DeterministicAIProvider(IAIAnalysisProvider):
         satisfied_count = sum(1 for c in conditions if c.satisfied)
         total_count = len(conditions)
 
+        trade_setup_obj: Optional[TradeSetup] = None
         if trade_proposal:
             state = AnalysisStateEnum.VALID_SETUP
             act = trade_proposal["action"]
@@ -745,6 +753,53 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             grade = trade_proposal["setup_grade"]
             kz = trade_proposal["killzone"]
             sl_buf = trade_proposal["sl_buffer_pips"]
+            risk_dist = trade_proposal.get("risk_distance") or abs(ent - sl)
+            effective_pip = pip_size if (pip_size and pip_size > 0) else 0.0001
+            risk_pips = round(risk_dist / effective_pip, 1)
+
+            confluence_items = [
+                f"{swp} Liquidity Purged",
+                "Judas Swing Exhaustion Wick Confirmed",
+                "MSS Displacement Verified (Zero-Repaint)",
+                f"Active FVG Retest Entry Zone with {sl_buf}p ATR Buffer",
+                f"Session Killzone: {kz} ({grade})",
+            ]
+
+            trade_setup_obj = TradeSetup(
+                action=act,
+                entry_price=round(ent, 5),
+                stop_loss=round(sl, 5),
+                take_profit=round(tp2, 5),
+                risk_pips=risk_pips,
+                targets={
+                    "tp1": TradeTarget(
+                        price=round(tp1, 5),
+                        rr=1.5,
+                        action="CLOSE_40_PERCENT_AND_MOVE_SL_TO_BE",
+                    ),
+                    "tp2": TradeTarget(
+                        price=round(tp2, 5),
+                        rr=round(rr, 2),
+                        action="CLOSE_40_PERCENT_AT_LIQUIDITY",
+                    ),
+                    "tp3": TradeTarget(
+                        price=round(tp3, 5),
+                        rr=5.0,
+                        action="TRAIL_20_PERCENT_RUNNER",
+                    ),
+                },
+                invalidation=InvalidationRule(
+                    expiry_minutes=30,
+                    cancel_if_touched=round(tp1, 5),
+                    note=f"Cancel limit order if {tp1:.2f} is reached prior to entry fill.",
+                ),
+                confluence=confluence_items,
+                grade=grade,
+                session=kz,
+                model=model,
+                rr_ratio=rr,
+                sl_buffer_pips=sl_buf,
+            )
 
             summary = (
                 f"🎯 VALID SETUP [{act}]: {symbol} ({grade} • {kz}). "
@@ -819,4 +874,5 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             ambiguities_detected=ambiguities,
             confidence_notes=confidence_notes,
             full_reasoning=reasoning,
+            trade_setup=trade_setup_obj,
         )

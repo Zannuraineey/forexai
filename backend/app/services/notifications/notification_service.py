@@ -197,22 +197,65 @@ class NotificationService:
 
         # Format Notification Content
         if state_str == AnalysisStateEnum.VALID_SETUP.value:
-            title = f"🎯 VALID SETUP: {analysis.symbol} ({analysis.timeframe})"
+            if getattr(analysis, "trade_setup", None):
+                ts = analysis.trade_setup
+                title = f"🎯 {ts.action}: {analysis.symbol} ({ts.grade or 'Grade A'})"
+                tp1_p = ts.targets.get("tp1").price if (isinstance(ts.targets, dict) and "tp1" in ts.targets) else ""
+                tp2_p = ts.targets.get("tp2").price if (isinstance(ts.targets, dict) and "tp2" in ts.targets) else ""
+                body = (
+                    f"{ts.action} @ {ts.entry_price} | SL: {ts.stop_loss} ({ts.risk_pips}p) | "
+                    f"TP1: {tp1_p} (Move BE) | TP2: {tp2_p} (1:{ts.rr_ratio}R)"
+                )
+                payload = {
+                    "type": "TRADE_SETUP_ALERT",
+                    "analysis_id": str(analysis.id),
+                    "symbol": analysis.symbol,
+                    "timeframe": analysis.timeframe,
+                    "state": state_str,
+                    "action": ts.action,
+                    "entry_price": str(ts.entry_price),
+                    "stop_loss": str(ts.stop_loss),
+                    "tp1": str(tp1_p),
+                    "tp2": str(tp2_p),
+                    "risk_pips": str(ts.risk_pips),
+                    "rr_ratio": str(ts.rr_ratio or ""),
+                    "session": analysis.session_name,
+                    "grade": str(ts.grade or ""),
+                    "timestamp_utc": analysis.timestamp_utc.isoformat(),
+                }
+            else:
+                title = f"🎯 VALID SETUP: {analysis.symbol} ({analysis.timeframe})"
+                body = analysis.summary
+                payload = {
+                    "analysis_id": str(analysis.id),
+                    "symbol": analysis.symbol,
+                    "timeframe": analysis.timeframe,
+                    "state": state_str,
+                    "session": analysis.session_name,
+                    "timestamp_utc": analysis.timestamp_utc.isoformat(),
+                }
         elif state_str == AnalysisStateEnum.POTENTIAL_SETUP.value:
             title = f"⚠️ SETUP FORMING: {analysis.symbol} ({analysis.timeframe})"
+            body = analysis.summary
+            payload = {
+                "analysis_id": str(analysis.id),
+                "symbol": analysis.symbol,
+                "timeframe": analysis.timeframe,
+                "state": state_str,
+                "session": analysis.session_name,
+                "timestamp_utc": analysis.timestamp_utc.isoformat(),
+            }
         else:
             title = f"AI Market Alert: {analysis.symbol} ({analysis.timeframe}) - {state_str}"
-
-        body = analysis.summary
-
-        payload = {
-            "analysis_id": analysis.id,
-            "symbol": analysis.symbol,
-            "timeframe": analysis.timeframe,
-            "state": state_str,
-            "session": analysis.session_name,
-            "timestamp_utc": analysis.timestamp_utc.isoformat(),
-        }
+            body = analysis.summary
+            payload = {
+                "analysis_id": str(analysis.id),
+                "symbol": analysis.symbol,
+                "timeframe": analysis.timeframe,
+                "state": state_str,
+                "session": analysis.session_name,
+                "timestamp_utc": analysis.timestamp_utc.isoformat(),
+            }
 
         # 5. Dispatch to FCM via Firebase Admin SDK
         fb_app = _get_firebase_app()
@@ -409,6 +452,114 @@ class NotificationService:
         await self.db.commit()
         await self.db.refresh(record)
         logger.info(f"Dispatched UT Bot notification {record.id} for {sym} ({sent_count} live FCM delivered).")
+        return NotificationRead.model_validate(record)
+
+    async def dispatch_trade_lifecycle_update(
+        self,
+        symbol: str,
+        event_type: str,
+        price: float,
+        timeframe: str = "15m",
+        action: Optional[str] = None,
+        details: Optional[str] = None,
+        analysis_id: Optional[int] = None,
+        user_id: int = 1,
+    ) -> Optional[NotificationRead]:
+        """
+        Dispatches real-time actionable trade lifecycle alerts:
+        - ENTRY_FILLED: Limit order activated at entry zone
+        - TP1_HIT_MOVE_TO_BE: +1.5R achieved -> Close 40% & Trail Stop to Break-Even (protects against reversals)
+        - TP2_HIT: +Target R achieved -> Close 40% at Key Liquidity
+        - TP3_HIT: Runner target reached
+        - SL_HIT: Stop loss touched
+        - SETUP_CANCELLED: Target reached before entry fill -> Front-run cancellation
+        """
+        sym = symbol.upper()
+        now = datetime.now(timezone.utc)
+        ev_upper = event_type.upper()
+
+        if ev_upper == "ENTRY_FILLED":
+            title = f"⚡ ORDER FILLED: {sym} [{action or 'LIMIT'}]"
+            body = f"{sym} entered at {price:.2f}. Active position tracking initiated. Monitoring TP1 for +1.5R partial & BE trail."
+        elif ev_upper in ["TP1_HIT", "TP1_HIT_MOVE_TO_BE"]:
+            title = f"🏆 TP1 HIT (+1.5R): {sym} - MOVE SL TO BREAK-EVEN!"
+            body = f"{sym} touched {price:.2f}! Action: Close 40% position and immediately move Stop Loss to Break-Even (protects against reversal)."
+        elif ev_upper == "TP2_HIT":
+            title = f"🎉 TP2 HIT: {sym} Reached Target Liquidity!"
+            body = f"{sym} reached {price:.2f}! Action: Close 40% at target liquidity. Let 20% runner ride to TP3."
+        elif ev_upper == "TP3_HIT":
+            title = f"🚀 TP3 RUNNER HIT: {sym} Max Target Achieved!"
+            body = f"{sym} reached extreme target {price:.2f}. Trade fully concluded with maximum target R:R."
+        elif ev_upper == "SL_HIT":
+            title = f"🛑 STOP LOSS HIT: {sym} Exited at {price:.2f}"
+            body = f"Setup reached stop level {price:.2f}. Trade closed with controlled risk and ATR buffer protection."
+        elif ev_upper in ["SETUP_CANCELLED", "FRONT_RUN_CANCELLED"]:
+            title = f"⚠️ SETUP CANCELLED: {sym} Front-Run Detected"
+            body = f"{sym} moved to target without filling entry limit at {price:.2f}. CANCEL pending order to prevent late fills."
+        else:
+            title = f"Trade Update: {sym} - {event_type}"
+            body = details or f"Price update at {price:.2f} for {sym}."
+
+        payload = {
+            "type": "TRADE_LIFECYCLE_EVENT",
+            "event_type": ev_upper,
+            "symbol": sym,
+            "timeframe": timeframe,
+            "price": str(price),
+            "action": str(action or ""),
+            "details": str(details or ""),
+            "analysis_id": str(analysis_id or ""),
+            "timestamp_utc": now.isoformat(),
+        }
+
+        # Dispatch to registered devices
+        dev_stmt = select(Device).where(Device.user_id == user_id)
+        dev_res = await self.db.execute(dev_stmt)
+        devices = dev_res.scalars().all()
+
+        fb_app = _get_firebase_app()
+        sent_count = 0
+        if fb_app and devices:
+            android_config = messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    sound="default",
+                    priority="max",
+                    default_vibrate_timings=True,
+                    channel_id="forex_ai_alerts",
+                    icon="ic_stat_notification",
+                    color="#10B981" if ("TP" in ev_upper or "FILLED" in ev_upper) else "#EF4444",
+                ),
+            )
+            for dev in devices:
+                try:
+                    msg = messaging.Message(
+                        notification=messaging.Notification(title=title, body=body),
+                        data={k: str(v) for k, v in payload.items()},
+                        android=android_config,
+                        token=dev.fcm_token,
+                    )
+                    messaging.send(msg)
+                    sent_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to deliver FCM push to device {dev.id}: {e}")
+
+        status_val = "SENT" if (devices and sent_count > 0) else ("SENT_SIMULATED" if devices else "PENDING_NO_DEVICES")
+        record = Notification(
+            analysis_id=analysis_id,
+            user_id=user_id,
+            channel="fcm",
+            title=title,
+            body=body,
+            payload=payload,
+            sent_at=now if devices else None,
+            status=status_val,
+            created_at=now,
+        )
+        self.db.add(record)
+        await self.db.commit()
+        await self.db.refresh(record)
+        logger.info(f"Dispatched trade lifecycle alert {record.id} [{ev_upper}] for {sym}.")
         return NotificationRead.model_validate(record)
 
     async def dispatch_economic_event_alert(

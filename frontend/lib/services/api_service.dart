@@ -253,6 +253,35 @@ class ApiService {
     throw Exception('Failed to evaluate AI market analysis: ${response.body}');
   }
 
+  static Future<bool> reportTradeLifecycleEvent({
+    required String symbol,
+    required String eventType,
+    required double price,
+    String timeframe = '15m',
+    String? action,
+    String? details,
+    int? analysisId,
+  }) async {
+    try {
+      final response = await _post(
+        '/api/v1/analysis/lifecycle-event',
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'symbol': symbol,
+          'event_type': eventType,
+          'price': price,
+          'timeframe': timeframe,
+          'action': action,
+          'details': details,
+          'analysis_id': analysisId,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<Map<String, dynamic>> getUtBotAnalysis(
     String symbol, {
     String timeframe = '15m',

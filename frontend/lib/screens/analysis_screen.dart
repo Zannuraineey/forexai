@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../models/ai_analysis.dart';
 import '../models/market_context_model.dart';
@@ -163,7 +164,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               _buildSectionLabel('Conclusion'),
               const SizedBox(height: 6),
               _buildConclusionCard(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 18),
+
+              // 5. Actionable Trade Execution Ticket
+              if (_analysis?.tradeSetup != null || _analysis?.state == 'VALID_SETUP') ...[
+                _buildSectionLabel('Actionable Trade Ticket (3-Tier Targets)'),
+                const SizedBox(height: 6),
+                _buildTradeTicketCard(),
+                const SizedBox(height: 24),
+              ],
             ],
           ],
 
@@ -1001,4 +1010,654 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       ),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Actionable Trade Ticket Card & 3-Tier Scaling Implementation
+  // ---------------------------------------------------------------------------
+
+  Widget _buildTradeTicketCard() {
+    final setup = _analysis?.tradeSetup;
+    final isShort = setup?.action.contains('SELL') ?? (_analysis?.summary.contains('SELL') ?? false);
+    final action = setup?.action ?? (isShort ? 'SELL LIMIT' : 'BUY LIMIT');
+    final actionColor = isShort ? AppTheme.downRed : AppTheme.upGreen;
+    final entry = (setup?.entryPrice != null && setup!.entryPrice > 0)
+        ? setup.entryPrice
+        : (_extractSummaryPrice('Entry') ?? 0.0);
+    final sl = (setup?.stopLoss != null && setup!.stopLoss > 0)
+        ? setup.stopLoss
+        : (_extractSummaryPrice('SL') ?? 0.0);
+    final tp1 = (setup?.targets['tp1']?.price != null && setup!.targets['tp1']!.price > 0)
+        ? setup.targets['tp1']!.price
+        : (_extractSummaryPrice('TP1') ?? 0.0);
+    final tp2 = (setup?.targets['tp2']?.price != null && setup!.targets['tp2']!.price > 0)
+        ? setup.targets['tp2']!.price
+        : ((setup?.takeProfit != null && setup!.takeProfit > 0)
+            ? setup.takeProfit
+            : (_extractSummaryPrice('TP2') ?? 0.0));
+    final tp3 = (setup?.targets['tp3']?.price != null && setup!.targets['tp3']!.price > 0)
+        ? setup.targets['tp3']!.price
+        : (_extractSummaryPrice('TP3') ?? 0.0);
+    final rr = setup?.rrRatio ?? 3.5;
+    final riskPips = setup?.riskPips ?? 0.0;
+    final grade = setup?.grade ?? 'Grade A+';
+    final slBuffer = setup?.slBufferPips ?? 15.0;
+
+    void copyToClipboard(String text, String label) {
+      Clipboard.setData(ClipboardData(text: text));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$label copied to clipboard ($text)'),
+          duration: const Duration(seconds: 2),
+          backgroundColor: AppTheme.surfaceSubtle,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+
+    final masterParams =
+        '${_analysis?.symbol ?? _selectedSymbol} $action @ ${entry > 0 ? entry.toStringAsFixed(2) : "--"} | SL: ${sl > 0 ? sl.toStringAsFixed(2) : "--"} | TP1: ${tp1 > 0 ? tp1.toStringAsFixed(2) : "--"} | TP2: ${tp2 > 0 ? tp2.toStringAsFixed(2) : "--"} | TP3: ${tp3 > 0 ? tp3.toStringAsFixed(2) : "--"}';
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: actionColor.withValues(alpha: 0.4),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: actionColor.withValues(alpha: 0.08),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(9)),
+              border: Border(
+                bottom: BorderSide(color: actionColor.withValues(alpha: 0.2)),
+              ),
+            ),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: actionColor.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: actionColor),
+                      ),
+                      child: Text(
+                        action,
+                        style: TextStyle(
+                          color: actionColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${_analysis?.symbol ?? _selectedSymbol} • ${_analysis?.timeframe.toUpperCase() ?? _selectedTimeframe.toUpperCase()}',
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: AppTheme.border),
+                      ),
+                      child: Text(
+                        grade,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: AppTheme.border),
+                      ),
+                      child: Text(
+                        '1:${rr.toStringAsFixed(1)} R:R',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: actionColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Quick Master Copy Bar
+                InkWell(
+                  onTap: () => copyToClipboard(masterParams, 'Order Parameters'),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceSubtle,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppTheme.border),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.copy_rounded, size: 14, color: AppTheme.textSecondary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            masterParams,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'COPY ALL',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Core Geometry Matrix: Entry | Stop Loss | Target 2
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final itemWidth = (constraints.maxWidth - 16) / 3;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildGeometryBox(
+                          label: 'ENTRY LIMIT',
+                          value: entry > 0 ? entry.toStringAsFixed(2) : '--',
+                          subtext: 'FVG Midpoint Retest',
+                          color: AppTheme.textPrimary,
+                          width: constraints.maxWidth > 340 ? itemWidth : double.infinity,
+                          onCopy: entry > 0 ? () => copyToClipboard(entry.toStringAsFixed(2), 'Entry') : null,
+                        ),
+                        _buildGeometryBox(
+                          label: 'STOP LOSS',
+                          value: sl > 0 ? sl.toStringAsFixed(2) : '--',
+                          subtext: riskPips > 0 ? '-$riskPips pips (+${slBuffer}p ATR)' : '+${slBuffer}p ATR Buffer',
+                          color: AppTheme.downRed,
+                          width: constraints.maxWidth > 340 ? itemWidth : double.infinity,
+                          onCopy: sl > 0 ? () => copyToClipboard(sl.toStringAsFixed(2), 'Stop Loss') : null,
+                        ),
+                        _buildGeometryBox(
+                          label: 'TARGET 2 (TP2)',
+                          value: tp2 > 0 ? tp2.toStringAsFixed(2) : '--',
+                          subtext: '1:${rr.toStringAsFixed(1)} R:R Liquidity',
+                          color: AppTheme.upGreen,
+                          width: constraints.maxWidth > 340 ? itemWidth : double.infinity,
+                          onCopy: tp2 > 0 ? () => copyToClipboard(tp2.toStringAsFixed(2), 'Take Profit 2') : null,
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 14),
+
+                // 3-Tier Scaling Targets
+                const Text(
+                  '3-TIER SCALING EXECUTION BLUEPRINT',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textMuted,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                _buildTargetTierRow(
+                  tier: 'TP1',
+                  rr: '1:1.5 R:R',
+                  price: tp1 > 0 ? tp1.toStringAsFixed(2) : '--',
+                  actionLabel: 'CLOSE 40% & MOVE SL TO BREAK-EVEN',
+                  note: 'Crucial milestone: locks in profit and immunizes position against market reversal.',
+                  isMilestone: true,
+                  onCopy: tp1 > 0 ? () => copyToClipboard(tp1.toStringAsFixed(2), 'TP1') : null,
+                ),
+                const SizedBox(height: 6),
+                _buildTargetTierRow(
+                  tier: 'TP2',
+                  rr: '1:${rr.toStringAsFixed(1)} R:R',
+                  price: tp2 > 0 ? tp2.toStringAsFixed(2) : '--',
+                  actionLabel: 'CLOSE 40% AT STRUCTURAL LIQUIDITY',
+                  note: 'Opposite session dealing range extreme / target liquidity pool.',
+                  isMilestone: false,
+                  onCopy: tp2 > 0 ? () => copyToClipboard(tp2.toStringAsFixed(2), 'TP2') : null,
+                ),
+                const SizedBox(height: 6),
+                _buildTargetTierRow(
+                  tier: 'TP3',
+                  rr: '1:5.0 R:R',
+                  price: tp3 > 0 ? tp3.toStringAsFixed(2) : '--',
+                  actionLabel: 'TRAIL 20% RUNNER',
+                  note: 'Leave runner position with trailing stop behind swing structure.',
+                  isMilestone: false,
+                  onCopy: tp3 > 0 ? () => copyToClipboard(tp3.toStringAsFixed(2), 'TP3') : null,
+                ),
+                const SizedBox(height: 14),
+
+                // Invalidation & Front-Run Rule
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.shield_outlined, size: 15, color: Color(0xFFF59E0B)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'FRONT-RUN & INVALIDATION RULE',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFFF59E0B),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              setup?.invalidation.note ??
+                                  'Cancel pending limit order if price reaches TP1 (${tp1 > 0 ? tp1.toStringAsFixed(2) : "target"}) before entry is filled (30m validity window).',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppTheme.textSecondary,
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Confluences Checklist
+                if (setup != null && setup.confluence.isNotEmpty) ...[
+                  const Text(
+                    'VERIFIED TECHNICAL CONFLUENCES',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textMuted,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: setup.confluence.map((c) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceSubtle,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: AppTheme.border),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.check_circle_rounded, size: 12, color: AppTheme.upGreen),
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                c,
+                                style: const TextStyle(fontSize: 11, color: AppTheme.textPrimary),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+
+                // Interactive Lifecycle Triggers
+                const Text(
+                  'NOTIFY LIFECYCLE MILESTONES',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textMuted,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _buildLifecycleButton(
+                      label: 'Order Filled',
+                      icon: Icons.check_circle_outline_rounded,
+                      color: AppTheme.accent,
+                      onTap: () => _triggerLifecycleAlert('ENTRY_FILLED', entry, action),
+                    ),
+                    _buildLifecycleButton(
+                      label: 'TP1 Hit (Move BE)',
+                      icon: Icons.emoji_events_outlined,
+                      color: AppTheme.upGreen,
+                      onTap: () => _triggerLifecycleAlert('TP1_HIT_MOVE_TO_BE', tp1, action),
+                    ),
+                    _buildLifecycleButton(
+                      label: 'TP2 Hit',
+                      icon: Icons.military_tech_outlined,
+                      color: AppTheme.upGreen,
+                      onTap: () => _triggerLifecycleAlert('TP2_HIT', tp2, action),
+                    ),
+                    _buildLifecycleButton(
+                      label: 'Cancel Front-Run',
+                      icon: Icons.cancel_outlined,
+                      color: const Color(0xFFF59E0B),
+                      onTap: () => _triggerLifecycleAlert('SETUP_CANCELLED', entry, action),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGeometryBox({
+    required String label,
+    required String value,
+    required String subtext,
+    required Color color,
+    required double width,
+    VoidCallback? onCopy,
+  }) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceSubtle,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textMuted,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              if (onCopy != null)
+                InkWell(
+                  onTap: onCopy,
+                  child: const Padding(
+                    padding: EdgeInsets.all(2.0),
+                    child: Icon(Icons.copy_rounded, size: 12, color: AppTheme.textMuted),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              fontFamily: 'monospace',
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtext,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 10,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTargetTierRow({
+    required String tier,
+    required String rr,
+    required String price,
+    required String actionLabel,
+    required String note,
+    required bool isMilestone,
+    VoidCallback? onCopy,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: isMilestone ? const Color(0xFF10B981).withValues(alpha: 0.06) : AppTheme.surfaceSubtle,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isMilestone ? const Color(0xFF10B981).withValues(alpha: 0.3) : AppTheme.border,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isMilestone ? const Color(0xFF10B981).withValues(alpha: 0.2) : AppTheme.surface,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  tier,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: isMilestone ? const Color(0xFF10B981) : AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                rr,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+              const Spacer(),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    price,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'monospace',
+                      color: isMilestone ? const Color(0xFF10B981) : AppTheme.textPrimary,
+                    ),
+                  ),
+                  if (onCopy != null) ...[
+                    const SizedBox(width: 6),
+                    InkWell(
+                      onTap: onCopy,
+                      child: const Icon(Icons.copy_rounded, size: 12, color: AppTheme.textMuted),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: isMilestone ? const Color(0xFF10B981).withValues(alpha: 0.15) : AppTheme.surface,
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: isMilestone ? const Color(0xFF10B981).withValues(alpha: 0.3) : AppTheme.border,
+                  ),
+                ),
+                child: Text(
+                  actionLabel,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                    color: isMilestone ? const Color(0xFF10B981) : AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            note,
+            style: const TextStyle(
+              fontSize: 10,
+              color: AppTheme.textMuted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLifecycleButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _triggerLifecycleAlert(String eventType, double price, String action) async {
+    final sym = _analysis?.symbol ?? _selectedSymbol;
+    final tf = _analysis?.timeframe ?? _selectedTimeframe;
+    final ok = await ApiService.reportTradeLifecycleEvent(
+      symbol: sym,
+      eventType: eventType,
+      price: price > 0 ? price : 0.0,
+      timeframe: tf,
+      action: action,
+      analysisId: _analysis?.id,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok
+            ? 'Lifecycle milestone dispatched: $eventType ($sym)'
+            : 'Milestone recorded locally.'),
+        duration: const Duration(seconds: 2),
+        backgroundColor: ok ? AppTheme.surfaceSubtle : AppTheme.invalidated.withValues(alpha: 0.8),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  double? _extractSummaryPrice(String key) {
+    final text = _analysis?.summary ?? '';
+    final reg = RegExp('$key:\\s*([0-9.]+)');
+    final m = reg.firstMatch(text);
+    if (m != null) {
+      return double.tryParse(m.group(1) ?? '');
+    }
+    return null;
+  }
 }
+
