@@ -168,14 +168,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '${sessionName.toUpperCase()} STRATEGY INSTRUCTIONS (v$version)',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
+                  Expanded(
+                    child: Text(
+                      '${sessionName.toUpperCase()} STRATEGY INSTRUCTIONS (v$version)',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   TextButton(
                     onPressed: () {
                       Navigator.pop(ctx);
@@ -448,20 +452,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-            const SizedBox(height: 2),
-            Text(timeUtc, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              const SizedBox(height: 2),
+              Text(timeUtc, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+            ],
+          ),
         ),
+        const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: isActive ? AppTheme.upGreen.withOpacity(0.12) : AppTheme.surfaceSubtle,
+            color: isActive ? AppTheme.upGreen.withValues(alpha: 0.12) : AppTheme.surfaceSubtle,
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: isActive ? AppTheme.upGreen.withOpacity(0.4) : AppTheme.border),
+            border: Border.all(color: isActive ? AppTheme.upGreen.withValues(alpha: 0.4) : AppTheme.border),
           ),
           child: Text(
             isActive ? 'ACTIVE' : 'CLOSED',
@@ -570,14 +577,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('$sessionTitle Session Rules', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-            const SizedBox(height: 2),
-            Text('Version $vNum', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('$sessionTitle Session Rules', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              const SizedBox(height: 2),
+              Text('Version $vNum', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+            ],
+          ),
         ),
+        const SizedBox(width: 8),
         TextButton(
           onPressed: () => _showInstructionEditorModal(sessionTitle.toLowerCase().replaceAll(' ', '_'), text, vNum),
           child: const Text('Edit / History', style: TextStyle(fontSize: 12, color: AppTheme.accent)),

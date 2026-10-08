@@ -1563,22 +1563,25 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           const SizedBox(height: 4),
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                decoration: BoxDecoration(
-                  color: isMilestone ? const Color(0xFF10B981).withValues(alpha: 0.15) : AppTheme.surface,
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(
-                    color: isMilestone ? const Color(0xFF10B981).withValues(alpha: 0.3) : AppTheme.border,
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: isMilestone ? const Color(0xFF10B981).withValues(alpha: 0.15) : AppTheme.surface,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(
+                      color: isMilestone ? const Color(0xFF10B981).withValues(alpha: 0.3) : AppTheme.border,
+                    ),
                   ),
-                ),
-                child: Text(
-                  actionLabel,
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                    color: isMilestone ? const Color(0xFF10B981) : AppTheme.textSecondary,
+                  child: Text(
+                    actionLabel,
+                    softWrap: true,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                      color: isMilestone ? const Color(0xFF10B981) : AppTheme.textSecondary,
+                    ),
                   ),
                 ),
               ),

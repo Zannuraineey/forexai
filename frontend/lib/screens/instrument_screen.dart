@@ -207,14 +207,18 @@ class _InstrumentScreenState extends State<InstrumentScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        sessionStr,
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                      Expanded(
+                        child: Text(
+                          sessionStr,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: activeSessions.isNotEmpty ? AppTheme.upGreen.withOpacity(0.15) : AppTheme.surfaceSubtle,
+                          color: activeSessions.isNotEmpty ? AppTheme.upGreen.withValues(alpha: 0.15) : AppTheme.surfaceSubtle,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(

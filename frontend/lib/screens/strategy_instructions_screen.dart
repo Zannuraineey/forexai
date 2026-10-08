@@ -150,9 +150,12 @@ class _StrategyInstructionsScreenState extends State<StrategyInstructionsScreen>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          '${sessionName.toUpperCase()} VERSION AUDIT LOG',
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.5),
+                        Expanded(
+                          child: Text(
+                            '${sessionName.toUpperCase()} VERSION AUDIT LOG',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.5),
+                          ),
                         ),
                         IconButton(
                           icon: const Icon(Icons.close),
@@ -303,16 +306,22 @@ class _StrategyInstructionsScreenState extends State<StrategyInstructionsScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.verified_rounded, color: AppTheme.primaryLight, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Active Version: #${item?.version ?? 1}',
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                  ),
-                ],
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.verified_rounded, color: AppTheme.primaryLight, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Active Version: #${item?.version ?? 1}',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.textPrimary,

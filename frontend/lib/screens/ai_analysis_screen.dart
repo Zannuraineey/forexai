@@ -259,9 +259,14 @@ class _AIAnalysisScreenState extends State<AIAnalysisScreen> {
                       ),
                     ),
                   ),
-                  Text(
-                    '${record.symbol} • ${record.timeframe} • ${record.sessionName.toUpperCase()}',
-                    style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${record.symbol} • ${record.timeframe} • ${record.sessionName.toUpperCase()}',
+                      textAlign: TextAlign.right,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ],
               ),

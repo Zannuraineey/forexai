@@ -137,14 +137,18 @@ class _HistoryBacktestScreenState extends State<HistoryBacktestScreen> with Sing
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '${r.symbol} (${r.timeframe})',
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                    Expanded(
+                      child: Text(
+                        '${r.symbol} (${r.timeframe})',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: stateColor.withOpacity(0.15),
+                        color: stateColor.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -167,10 +171,14 @@ class _HistoryBacktestScreenState extends State<HistoryBacktestScreen> with Sing
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Session: ${r.sessionName.toUpperCase()} • Ver: #${r.instructionVersionId ?? 1}',
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                    Expanded(
+                      child: Text(
+                        'Session: ${r.sessionName.toUpperCase()} • Ver: #${r.instructionVersionId ?? 1}',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       r.timestampUtc.split('T').first,
                       style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),

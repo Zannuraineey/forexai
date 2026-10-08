@@ -177,28 +177,34 @@ class _MarketsScreenState extends State<MarketsScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: active.isNotEmpty ? AppTheme.upGreen : AppTheme.textMuted,
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: active.isNotEmpty ? AppTheme.upGreen : AppTheme.textMuted,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Session: $activeStr',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Session: $activeStr',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
-          if (isOverlap)
+          if (isOverlap) ...[
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: AppTheme.accent.withOpacity(0.15),
+                color: AppTheme.accent.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Text(
@@ -206,6 +212,7 @@ class _MarketsScreenState extends State<MarketsScreen> {
                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.accent),
               ),
             ),
+          ],
         ],
       ),
     );
@@ -333,11 +340,14 @@ class _MarketsScreenState extends State<MarketsScreen> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            Text(
-                              item.marketStatus,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: item.marketStatus == 'Open' ? AppTheme.textSecondary : AppTheme.textMuted,
+                            Expanded(
+                              child: Text(
+                                item.marketStatus,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: item.marketStatus == 'Open' ? AppTheme.textSecondary : AppTheme.textMuted,
+                                ),
                               ),
                             ),
                           ],

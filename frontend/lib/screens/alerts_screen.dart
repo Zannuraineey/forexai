@@ -296,20 +296,19 @@ class _AlertsScreenState extends State<AlertsScreen> {
                 children: [
                   // Meta Line: 10:42 | XAUUSD | London
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       // Timestamp (10:42)
                       Text(
                         timeStr,
                         style: const TextStyle(
-                          fontSize: 13,
+                          fontSize: 12,
                           fontWeight: FontWeight.w700,
                           color: AppTheme.textPrimary,
                           fontFamily: 'monospace',
                         ),
                       ),
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 10),
                       // Symbol (XAUUSD)
                       Text(
                         item.symbol,
@@ -319,31 +318,39 @@ class _AlertsScreenState extends State<AlertsScreen> {
                           color: AppTheme.textPrimary,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      // Session (London)
-                      Text(
-                        item.session,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                          fontWeight: FontWeight.w500,
+                      const SizedBox(width: 10),
+                      // Session (London) - Expanded to fill available space safely
+                      Expanded(
+                        child: Text(
+                          item.session,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                      const Spacer(),
-                      // Quiet state indicator tag
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: stateColor.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: Text(
-                          item.state,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                            color: stateColor,
+                      const SizedBox(width: 8),
+                      // Quiet state indicator tag - Flexible to prevent overflow
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: stateColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            item.state,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                              color: stateColor,
+                            ),
                           ),
                         ),
                       ),
@@ -353,6 +360,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
                   // Alert Message
                   Text(
                     item.message,
+                    softWrap: true,
                     style: const TextStyle(
                       fontSize: 13,
                       height: 1.4,

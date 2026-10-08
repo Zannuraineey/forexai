@@ -108,9 +108,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Icon(Icons.auto_graph_rounded, color: AppTheme.primaryLight, size: 24),
             SizedBox(width: 10),
-            Text(
-              'Forex AI Market Platform',
-              style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+            Expanded(
+              child: Text(
+                'Forex AI Market Platform',
+                style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -367,24 +370,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      sym,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
-                        color: isGoldOrSilver ? Colors.amberAccent : AppTheme.textPrimary,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        sym,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: isGoldOrSilver ? Colors.amberAccent : AppTheme.textPrimary,
+                        ),
                       ),
-                    ),
-                    Text(
-                      isGoldOrSilver ? 'Commodity Metal' : 'Forex Major',
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
-                    ),
-                  ],
+                      Text(
+                        isGoldOrSilver ? 'Commodity Metal' : 'Forex Major',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 4),
                 const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppTheme.textMuted),
               ],
             ),
@@ -477,18 +485,21 @@ class _CatalogBottomSheetState extends State<_CatalogBottomSheet> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Instrument Catalog',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      'Activate pairs to analyze, backtest & receive alerts',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                    ),
-                  ],
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Instrument Catalog',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        'Activate pairs to analyze, backtest & receive alerts',
+                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded, color: AppTheme.textMuted),
