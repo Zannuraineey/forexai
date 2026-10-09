@@ -439,7 +439,7 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             swp_depth = bearish_sweep.get("sweep_depth_pips", 0) if isinstance(bearish_sweep, dict) else getattr(bearish_sweep, "sweep_depth_pips", 0)
 
             conditions.append(ConditionStatus(
-                condition=f"Buy-Side Liquidity Swept ({lvl_name})",
+                condition=f"MSNR Storyline: Buy-Side Liquidity Swept ({lvl_name})",
                 satisfied=True,
                 evidence=f"Wick peaked at {extreme:.2f} and closed inside. Depth: {swp_depth} pips."
             ))
@@ -454,7 +454,7 @@ class DeterministicAIProvider(IAIAnalysisProvider):
                 ))
 
             conditions.append(ConditionStatus(
-                condition="Judas Swing Exhaustion Bar Confirmed",
+                condition="MSNR Classic Exhaustion Bar Confirmed",
                 satisfied=is_exhaustion,
                 evidence=(
                     f"Rejection wick is {wick_ratio * 100:.0f}% of candle range (threshold >= 35%). Smart money absorption confirmed."
@@ -466,7 +466,7 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             has_mss = bearish_mss is not None
             broken_sw_p = (bearish_mss.get("broken_swing_price", "N/A") if isinstance(bearish_mss, dict) else getattr(bearish_mss, "broken_swing_price", "N/A")) if has_mss else "N/A"
             conditions.append(ConditionStatus(
-                condition="Displacement & Market Structure Shift (MSS Bearish)",
+                condition="MSNR Displacement & Structure Shift (MSS Bearish)",
                 satisfied=has_mss,
                 evidence=f"Broken swing low at {broken_sw_p}" if has_mss else "Awaiting lower timeframe swing low break."
             ))
@@ -476,9 +476,9 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             fvg_bot = float(bearish_fvg.get("bottom_price", 0.0) if isinstance(bearish_fvg, dict) else getattr(bearish_fvg, "bottom_price", 0.0)) if has_fvg else 0.0
             fvg_mid = round((fvg_top + fvg_bot) / 2.0, 2) if has_fvg else current_price
             conditions.append(ConditionStatus(
-                condition="Fair Value Gap (FVG) Retest Zone Formed",
+                condition="MSNR 50% Consequent Encroachment (CE) Retest Zone",
                 satisfied=has_fvg,
-                evidence=f"Active FVG [{fvg_bot:.2f} - {fvg_top:.2f}] (Midpoint: {fvg_mid:.2f})" if has_fvg else "Awaiting 3-bar imbalance."
+                evidence=f"Active MSNR/CE zone [{fvg_bot:.2f} - {fvg_top:.2f}] (Midpoint: {fvg_mid:.2f})" if has_fvg else "Awaiting zone formation."
             ))
 
             # Stop loss with dynamic ATR buffer
@@ -563,7 +563,7 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             swp_depth = bullish_sweep.get("sweep_depth_pips", 0) if isinstance(bullish_sweep, dict) else getattr(bullish_sweep, "sweep_depth_pips", 0)
 
             conditions.append(ConditionStatus(
-                condition=f"Sell-Side Liquidity Swept ({lvl_name})",
+                condition=f"MSNR Storyline: Sell-Side Liquidity Swept ({lvl_name})",
                 satisfied=True,
                 evidence=f"Wick trough at {extreme:.2f} and closed inside. Depth: {swp_depth} pips."
             ))
@@ -578,7 +578,7 @@ class DeterministicAIProvider(IAIAnalysisProvider):
                 ))
 
             conditions.append(ConditionStatus(
-                condition="Judas Swing Exhaustion Bar Confirmed",
+                condition="MSNR Classic Exhaustion Bar Confirmed",
                 satisfied=is_exhaustion,
                 evidence=(
                     f"Rejection wick is {wick_ratio * 100:.0f}% of candle range (threshold >= 35%). Smart money absorption confirmed."
@@ -590,7 +590,7 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             has_mss = bullish_mss is not None
             broken_sw_p = (bullish_mss.get("broken_swing_price", "N/A") if isinstance(bullish_mss, dict) else getattr(bullish_mss, "broken_swing_price", "N/A")) if has_mss else "N/A"
             conditions.append(ConditionStatus(
-                condition="Displacement & Market Structure Shift (MSS Bullish)",
+                condition="MSNR Displacement & Structure Shift (MSS Bullish)",
                 satisfied=has_mss,
                 evidence=f"Broken swing high at {broken_sw_p}" if has_mss else "Awaiting lower timeframe swing high break."
             ))
@@ -600,9 +600,9 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             fvg_bot = float(bullish_fvg.get("bottom_price", 0.0) if isinstance(bullish_fvg, dict) else getattr(bullish_fvg, "bottom_price", 0.0)) if has_fvg else 0.0
             fvg_mid = round((fvg_top + fvg_bot) / 2.0, 2) if has_fvg else current_price
             conditions.append(ConditionStatus(
-                condition="Fair Value Gap (FVG) Retest Zone Formed",
+                condition="MSNR 50% Consequent Encroachment (CE) Retest Zone",
                 satisfied=has_fvg,
-                evidence=f"Active FVG [{fvg_bot:.2f} - {fvg_top:.2f}] (Midpoint: {fvg_mid:.2f})" if has_fvg else "Awaiting 3-bar imbalance."
+                evidence=f"Active MSNR/CE zone [{fvg_bot:.2f} - {fvg_top:.2f}] (Midpoint: {fvg_mid:.2f})" if has_fvg else "Awaiting zone formation."
             ))
 
             # Stop loss with dynamic ATR buffer
@@ -1034,7 +1034,7 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             confidence_notes = "Zero setup criteria satisfied."
 
         reasoning = (
-            f"Institutional SMC/ICT Multi-Step Reasoning for {symbol}:\n"
+            f"Institutional MSNR & Alchemist Multi-Step Reasoning for {symbol}:\n"
             + "\n".join([f"- [{ 'PASSED' if c.satisfied else 'PENDING' }] {c.condition}: {c.evidence}" for c in conditions])
         )
 
