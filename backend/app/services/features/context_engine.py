@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict
 
 from app.schemas.candle import CandleRead
@@ -51,6 +51,8 @@ class MarketContextSnapshot(BaseModel):
     session_state: Optional[CurrentSessionState] = None
     recent_liquidity_sweeps: List[LiquiditySweep] = []
     structured_market_state: Optional[StructuredMarketState] = None
+    dxy: Optional[Dict[str, Any]] = None
+    news: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(from_attributes=True)
 

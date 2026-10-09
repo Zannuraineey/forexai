@@ -4,6 +4,8 @@
 *.env
 *-firebase-adminsdk-*.json
 firebase-service-account.json
+api .md
+api*.md
 
 # Databases & Local state
 *.db
@@ -52,3 +54,8 @@ cached_calendar.json
 backend/app/services/news/cached_calendar.json
 .kotlin/
 **/android/.kotlin/
+
+# Large documents & PDFs (e.g. MSNR course materials)
+*.pdf
+docs/*.pdf
+docs/msnr_slides/

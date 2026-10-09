@@ -20,105 +20,84 @@ class StrategyService:
     """
 
     DEFAULT_PROMPTS = {
-        "asian": """### Strategy: Tokyo Sweep & Fractal Range Mean-Reversion Model
+        "asian": """### Strategy: MSNR Tokyo Accumulation & Classic A/V Range Model
 
 1. Time Window & Killzone:
 - Active Trading Window: 07:00 PM to 12:00 AM EST (00:00 to 05:00 UTC / Tokyo & Sydney Open).
 - Peak Focus: 08:00 PM to 09:30 PM EST (Tokyo Cash Open volume injection).
-- Favored Instruments: JPY Crosses (USDJPY, EURJPY, GBPJPY), AUDUSD, XAUUSD (early Asia physical gold flows), Volatility/Crash/Boom synthetics.
+- Favored Instruments: XAUUSD (Gold physical flows), XAGUSD (Silver), JPY Crosses (USDJPY, EURJPY, GBPJPY), AUDUSD.
 
-2. Pre-Asia Dealing Range Definition:
-- Identify the Pre-Asia / Sydney Range:
-  - New York PM / Post-Close High and Low (05:00 PM - 07:00 PM EST).
-  - Sydney Open initial range high (Buy-Side Liquidity) and low (Sell-Side Liquidity).
-- Operating Environment: Asian session is primarily an Accumulation / Consolidation Range. Expect mean reversion, not runaway trends, unless catalyzed by BoJ or high-impact APAC news.
+2. MSNR Pre-Asia Dealing Range Definition:
+- Identify key Malaysian Support & Resistance (MSNR) boundaries on the Line Chart:
+  - Classic A (Peak Resistance / Buy-Side Liquidity - BSL) at session highs.
+  - Classic V (Trough Support / Sell-Side Liquidity - SSL) at session lows.
+- Operating Environment: Asian session represents the Accumulation (A) Phase of Quarterly Theory.
+- Price builds internal range liquidity (IRL). Look for mean reversion back to 50% Consequent Encroachment (CE), not runaway trends.
 
-3. The Tokyo Open Liquidity Sweep:
-- Bearish Setup: Price pushes above the Sydney/Pre-Asia High around Tokyo Open (08:00-09:00 PM EST), sweeps Buy-Side Liquidity (BSL), and sharply rejects back inside the range.
-- Bullish Setup: Price dips below the Sydney/Pre-Asia Low around Tokyo Open, sweeps Sell-Side Liquidity (SSL), and sharply rejects back inside the range.
+3. The Tokyo Open Liquidity Sweep (MISS / Fakeout):
+- Bearish Setup: Price spikes above the Classic A Asian High around Tokyo Open (08:00-09:00 PM EST), sweeps BSL with a wick, and rejects with candle bodies closing inside the zone.
+- Bullish Setup: Price dips below the Classic V Asian Low around Tokyo Open, sweeps SSL with a wick, and rejects with candle bodies closing inside the zone.
 
-4. Lower Timeframe Confirmation & Entry (1m, 5m, 15m):
-- Following the sweep, require a Market Structure Shift (MSS) back toward Equilibrium (50% of the session range).
-- Formation of a clean Fair Value Gap (FVG) or Breaker Block.
-- Entry: Enter on the retest of the FVG or Breaker Block.
+4. Entry Trigger at 50% Consequent Encroachment (CE):
+- Following the sweep, require Market Structure Shift (MSS) on lower timeframes (M1, M5, M15).
+- Calculate 50% CE:
+  - Bullish: CE = (Open + Low) / 2 of the reaction candle.
+  - Bearish: CE = (Open + High) / 2 of the reaction candle.
+- Entry: Enter limit or market order upon retest tapping the 50% CE level.
 
 5. Risk Management & Invalidation:
-- Stop Loss: 1-2 pips beyond the Asian sweep wick extreme.
+- Stop Loss: 1-2 pips beyond the MSNR manipulation wick extreme.
 - Take Profit / Targets:
-  - Primary Target: Range Equilibrium (50% midpoint) or the opposing boundary of the Sydney/Asia range.
-  - Risk-to-Reward ratio: 1:1.5 to 1:2. Avoid forcing >1:3 targets during low-volatility Asian hours.
-- State Evaluation:
-  - VALID_SETUP: Pre-Asia high/low swept at Tokyo Open with confirmed MSS and FVG retest toward range midpoint.
-  - POTENTIAL_SETUP: Price testing outer Asian range boundaries near Tokyo open, awaiting sweep.
-  - WATCH: Mid-range chop with no liquidity sweep.
-  - INVALIDATED: Manipulation high/low breached or structure breaks without rejection.""",
-        "london": """### Strategy: Loz Tradez 3-Step London Session Model (1-Candle Expansion)
+  - Target 1: Range Equilibrium (50% midpoint CE of the entire Asian dealing range).
+  - Target 2: Opposing boundary (Classic A high or Classic V low).
+- Risk-to-Reward ratio: Minimum 1:1.5 to 1:2.0.""",
+        "london": """### Strategy: MSNR London Manipulation & RBS/SBR Flip Expansion Model
 
 1. Time Window & Killzone:
 - Active Trading Window: 03:00 AM to 04:30 AM EST (08:00 AM to 09:30 AM London/UTC).
-- Strict Rule: Time is the primary filter. Only execute setups during this 90-minute window.
+- Strict Rule: Time is the primary filter. Only execute setups during this 90-minute institutional window.
 
-2. Pre-Market Dealing Range:
-- Before 03:00 AM EST, establish the Pre-Market Range:
-  - Asian Session High (Buy-Side Liquidity - BSL)
-  - Asian Session Low (Sell-Side Liquidity - SSL)
-  - 02:00 AM EST hourly swing high/low.
-- Dealing Range Equilibrium (50%):
-  - Premium Zone (>50%): Strictly look for Shorts after BSL is purged.
-  - Discount Zone (<50%): Strictly look for Longs after SSL is purged.
+2. MSNR Pre-Market Dealing Range & Flip Zones:
+- Identify pre-market MSNR levels from the Asian session and prior day:
+  - Classic A (Asian High / BSL) & Classic V (Asian Low / SSL).
+  - Prior broken levels: RBS (Resistance Becomes Support) and SBR (Support Becomes Resistance).
+- Freshness Rule: Prioritize FRESH zones (0-1 prior touch). Avoid exhausted zones (3+ touches).
 
-3. The 3:00 AM Hourly Manipulation Candle:
-- Bearish Setup: 03:00 AM candle sweeps Asian High or 02:00 AM High, purges liquidity, and rejects leaving a prominent upper wick.
-- Bullish Setup: 03:00 AM candle sweeps Asian Low or 02:00 AM Low, purges liquidity, and rejects leaving a prominent lower wick.
+3. The London Manipulation (Judas Swing / MISS):
+- Bearish Setup: 03:00 AM candle sweeps Asian High into a Higher Timeframe (H4/H1) MSNR Resistance / SBR zone, rejects leaving a prominent upper wick.
+- Bullish Setup: 03:00 AM candle sweeps Asian Low into a Higher Timeframe (H4/H1) MSNR Support / RBS zone, rejects leaving a prominent lower wick.
 
-4. Lower Timeframe Confirmation & Entry (1m, 5m, 15m):
-- Following the sweep, require aggressive Displacement back inside the range.
-- Market Structure Shift (MSS) breaking recent swing structure.
-- Creation of a clean Fair Value Gap (FVG), Inefficiency, or Order Block.
-- Entry: Enter on the retest of the newly created FVG or Breaker Block.
+4. Confirmation & 50% CE Retest:
+- Require aggressive displacement closing back inside the MSNR range.
+- Lower timeframe (M15/M5) Market Structure Shift (MSS).
+- Entry: Enter on the retest of the 50% Consequent Encroachment (CE) of the MSNR zone or reaction order block.
 
 5. Risk Management & Invalidation:
-- Stop Loss: 1-2 pips beyond the manipulation wick extreme. A breach of this high/low immediately invalidates the setup.
-- Target: Opposing liquidity pool of the pre-market range (Asian High/Low), aiming for minimum 1:2 Risk-to-Reward (R:R).
-- State Evaluation:
-  - VALID_SETUP: Pre-market liquidity swept during 03:00-04:30 EST, displacement confirmed with MSS and FVG entry.
-  - POTENTIAL_SETUP: Price approaching Asian High/Low near 03:00 AM EST, awaiting sweep and rejection.
-  - WATCH: Outside killzone or consolidating within Asian range without sweep.
-  - INVALIDATED: Manipulation extreme breached or displacement failed.""",
-        "new_york": """### Strategy: Loz Tradez 9:30 AM Distribution & NY Expansion Model
+- Stop Loss: 1-2 pips beyond the manipulation wick extreme.
+- Target: Opposing session liquidity pool (Asian High/Low), targeting 1:2.0 to 1:3.0 Risk-to-Reward (R:R).""",
+        "new_york": """### Strategy: Alchemist Daily Profile #2 NY Reversal & Precious Metals SMT Model
 
 1. Time Window & Killzone:
-- Active Trading Window: 08:30 AM to 11:30 AM EST (New York AM Session).
+- Active Trading Window: 08:30 AM to 11:30 AM EST (12:30 to 15:30 UTC / New York AM Session).
 - Peak Focus: 09:30 AM to 10:30 AM EST (NYSE Equity Opening Bell & Initial Balance).
-- Strict Rule: High volatility injection occurs at 09:30 AM. Wait for the opening manipulation before entering.
 
-2. Dealing Range & Key Reference Levels:
-- London Session High & Low (Primary External Liquidity Pool).
-- 08:00 AM to 09:30 AM Pre-Market Swing High and Low.
-- Previous Day High / Low (PDH / PDL).
-- Dealing Range Equilibrium (50%):
-  - Premium (>50%): Look strictly for Shorts after Buy-Side Liquidity is swept.
-  - Discount (<50%): Look strictly for Longs after Sell-Side Liquidity is swept.
+2. Daily Profile #2 Framework:
+- Detects the institutional "Reversal of the Day" where London manipulation pushes price into HTF MSNR levels, and New York reverses the market toward External Range Liquidity (ERL).
+- Primary Focus: Gold (XAUUSD) and Silver (XAGUSD).
 
-3. The 9:30 AM Manipulation / Judas Swing:
-- At or shortly after 09:30 AM EST, institutional algorithm sweeps key liquidity:
-  - Bearish Setup: 09:30 candle spikes above London High or Pre-Market High, purges BSL, and violently rejects leaving an upper wick.
-  - Bullish Setup: 09:30 candle drops below London Low or Pre-Market Low, purges SSL, and violently rejects leaving a lower wick.
+3. Intermarket SMT Divergence Confirmation:
+- Bullish SMT: Silver (XAGUSD) sweeps below its session low to a lower low, but Gold (XAUUSD) makes a Higher Low, respecting a fresh MSNR Classic V or RBS Support zone. (Gold signals accumulation).
+- Bearish SMT: Silver (XAGUSD) sweeps above its session high to a higher high, but Gold (XAUUSD) makes a Lower High, respecting a fresh MSNR Classic A or SBR Resistance zone. (Gold signals distribution).
 
-4. Lower Timeframe Confirmation & Entry (1m, 5m, 15m):
-- Require aggressive Displacement with candle bodies closing back inside the range.
-- Clear Market Structure Shift (MSS) breaking internal swing structure.
-- Formation of a clean Fair Value Gap (FVG), Inverted FVG (iFVG), or Order Block.
-- Entry: Enter on the first retest of the FVG or Breaker Block.
+4. Execution at 50% Consequent Encroachment (CE):
+- Require lower timeframe (M15/M5) Market Structure Shift (MSS).
+- Calculate 50% CE of the MSNR zone / reaction candle.
+- Entry: Limit or market execution upon retest of 50% CE.
 
-5. Risk Management & Invalidation:
-- Stop Loss: 1-2 pips beyond the 09:30 manipulation wick extreme. Breach of this level immediately invalidates the trade idea.
-- Target: Opposing session liquidity (London Low if London High swept, or pre-market low), with minimum 1:2 Risk-to-Reward ratio (R:R).
-- State Evaluation:
-  - VALID_SETUP: London or pre-market extreme swept at 09:30 AM EST, followed by displacement, MSS, and FVG retest.
-  - POTENTIAL_SETUP: Price approaching London High/Low ahead of or during 09:30 AM open.
-  - WATCH: Choppy consolidation between 08:30-09:30 before the open, or outside NY killzone.
-  - INVALIDATED: Manipulation extreme violated or displacement fails to materialize.""",
+5. Risk Management & Multi-Target Take Profits:
+- Stop Loss: 1-2 pips beyond the displacement candle extreme or zone wick.
+- Target 1 (T1): Opposing session liquidity (London or Pre-market extreme) -> 1:2.0 R:R.
+- Target 2 (T2): Higher Timeframe External Range Liquidity (ERL) -> 1:3.5+ R:R.""",
     }
 
     def __init__(self, db: AsyncSession):

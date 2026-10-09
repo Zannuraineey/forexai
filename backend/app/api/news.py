@@ -51,7 +51,7 @@ async def get_dxy_metrics(db: AsyncSession = Depends(get_db)):
     market regime (Risk-On/Risk-Off), and SMC structure from live price feeds.
     """
     dxy_svc = DXYService(db)
-    return await dxy_svc.calculate_dxy_index()
+    return await dxy_svc.calculate_dxy_index(allow_synthetic_fallback=True)
 
 @router.get("/intelligence", response_model=NewsIntelligenceReport)
 async def get_news_intelligence(

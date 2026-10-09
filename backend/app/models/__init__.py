@@ -5,6 +5,7 @@ from app.models.analysis import AnalysisResult, AnalysisStateEnum, Notification,
 from app.models.market_features import MarketFeature
 from app.models.seven_hour_profile import SevenHourProfile
 from app.models.trade_outcome import TradeSetupOutcome
+from app.models.ai_macro_config import AIMacroProviderConfig
 
 __all__ = [
     "Instrument",
@@ -19,4 +20,5 @@ __all__ = [
     "MarketFeature",
     "SevenHourProfile",
     "TradeSetupOutcome",
+    "AIMacroProviderConfig",
 ]

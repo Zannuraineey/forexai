@@ -30,4 +30,8 @@ __all__ = [
     "MarketContextSnapshot",
     "TechnicalIndicatorsSnapshot",
     "MarketStructureSnapshot",
+    "SMTEngine",
+    "MSNREngine",
 ]
+from .smt_engine import SMTEngine
+from .msnr_engine import MSNREngine

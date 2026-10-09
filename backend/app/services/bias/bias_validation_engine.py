@@ -57,7 +57,7 @@ class BiasValidationEngine:
         """
         Evaluates DXY intermarket alignment against a symbol's proposed bias.
         """
-        if not dxy_data:
+        if not dxy_data or dxy_data.get("dxy_direction") == "UNAVAILABLE" or str(dxy_data.get("direction") or dxy_data.get("trend") or "").upper() == "UNAVAILABLE":
             return {
                 "dxy_direction": "UNAVAILABLE",
                 "dxy_trend_strength": None,
@@ -66,9 +66,9 @@ class BiasValidationEngine:
             }
 
         sym_upper = symbol.upper()
-        dxy_dir = str(dxy_data.get("direction") or dxy_data.get("trend") or "NEUTRAL").upper()
-        strength = dxy_data.get("trend_strength")
-        change = dxy_data.get("change") or dxy_data.get("change_pct")
+        dxy_dir = str(dxy_data.get("direction") or dxy_data.get("trend") or dxy_data.get("dxy_direction") or "NEUTRAL").upper()
+        strength = dxy_data.get("trend_strength") or dxy_data.get("dxy_trend_strength")
+        change = dxy_data.get("change") or dxy_data.get("change_pct") or dxy_data.get("dxy_change")
 
         is_usd_quote = sym_upper in cls.USD_QUOTE_INSTRUMENTS
         is_usd_base = sym_upper in cls.USD_BASE_INSTRUMENTS
@@ -127,15 +127,17 @@ class BiasValidationEngine:
     ) -> Dict[str, Any]:
         """
         Evaluates News / Macro risk filter without inventing trade direction.
+        Distinguishes UNAVAILABLE from LOW_RISK / NEUTRAL.
         """
-        if not news_data:
+        if not news_data or news_data.get("status") == "UNAVAILABLE" or str(news_data.get("usd_news_risk", "")).upper() == "UNAVAILABLE":
             return {
-                "risk_level": NewsRiskLevel.LOW_RISK,
+                "risk_level": NewsRiskLevel.UNAVAILABLE,
                 "high_impact_news_nearby": False,
                 "news_event": None,
                 "minutes_to_event": None,
                 "minutes_since_event": None,
                 "usd_news_risk": "UNAVAILABLE",
+                "news_direction": "UNAVAILABLE",
             }
 
         hi_nearby = bool(news_data.get("high_impact_news_nearby", False))
@@ -158,6 +160,8 @@ class BiasValidationEngine:
                 risk_level = NewsRiskLevel.HIGH_RISK
             elif raw_risk == "MEDIUM":
                 risk_level = NewsRiskLevel.MEDIUM_RISK
+            elif raw_risk == "UNAVAILABLE":
+                risk_level = NewsRiskLevel.UNAVAILABLE
             else:
                 risk_level = NewsRiskLevel.LOW_RISK
 
@@ -186,6 +190,7 @@ class BiasValidationEngine:
         custom_sweeps: Optional[List[Any]] = None,
         custom_mss: Optional[List[Any]] = None,
         custom_session: Optional[Dict[str, Any]] = None,
+        smt_data: Optional[Dict[str, Any]] = None,
     ) -> BiasValidationResult:
         """
         Executes unified multi-layer bias validation.
@@ -253,22 +258,28 @@ class BiasValidationEngine:
         p_class = "INSUFFICIENT_DATA"
         p_rel = None
 
+        p_status = "COMPLETED"
         if custom_7h:
             p_dir = str(custom_7h.get("direction") or custom_7h.get("seven_hour_direction") or "NEUTRAL").upper()
             p_class = str(custom_7h.get("classification") or custom_7h.get("seven_hour_classification") or "NORMAL").upper()
             p_rel = custom_7h.get("relationship") or custom_7h.get("seven_hour_relationship")
+            p_status = str(custom_7h.get("status") or "COMPLETED").upper()
         elif structured_state and structured_state.seven_hour_profile:
             sp = structured_state.seven_hour_profile
             p_dir = str(sp.direction.value if hasattr(sp.direction, "value") else sp.direction).upper()
             p_class = str(sp.classification.value if hasattr(sp.classification, "value") else sp.classification).upper()
             p_rel = sp.previous_relationship.value if hasattr(sp.previous_relationship, "value") else str(sp.previous_relationship) if sp.previous_relationship else None
+            p_status = str(sp.status.value if hasattr(sp.status, "value") else sp.status).upper()
         elif market_context and market_context.get("seven_hour_profile"):
             sp = market_context["seven_hour_profile"]
             p_dir = str(sp.get("direction", "NEUTRAL")).upper()
             p_class = str(sp.get("classification", "NORMAL")).upper()
             p_rel = sp.get("previous_relationship")
+            p_status = str(sp.get("status", "COMPLETED")).upper()
 
-        if p_dir in ("UNAVAILABLE", "INSUFFICIENT_DATA", "NONE"):
+        if p_status == "IN_PROGRESS":
+            p_role = SevenHourRelationship.IN_PROGRESS
+        elif p_dir in ("UNAVAILABLE", "INSUFFICIENT_DATA", "NONE"):
             p_role = SevenHourRelationship.UNAVAILABLE
         elif htf_bias_dir == "BULLISH":
             if p_dir == "BULLISH":
@@ -294,6 +305,7 @@ class BiasValidationEngine:
             "classification": p_class,
             "relationship": p_rel,
             "role_to_htf": p_role,
+            "status": p_status,
         }
 
         # -------------------------------------------------------------
@@ -407,13 +419,19 @@ class BiasValidationEngine:
         # -------------------------------------------------------------
         # 7. DXY Intermarket Context
         # -------------------------------------------------------------
+        eff_dxy = dxy_data
+        if eff_dxy is None and structured_state and structured_state.dxy:
+            eff_dxy = structured_state.dxy
+        elif eff_dxy is None and market_context:
+            eff_dxy = market_context.get("dxy")
+
         prelim_bias = htf_bias_dir if htf_bias_dir in ("BULLISH", "BEARISH") else (
-            "BULLISH" if p_dir == "BULLISH" else ("BEARISH" if p_dir == "BEARISH" else "NEUTRAL")
+            "BULLISH" if (p_dir == "BULLISH" and p_status == "COMPLETED") else ("BEARISH" if (p_dir == "BEARISH" and p_status == "COMPLETED") else "NEUTRAL")
         )
         dxy_payload = cls.evaluate_dxy_relationship(
             symbol=symbol,
             proposed_bias=prelim_bias,
-            dxy_data=dxy_data,
+            dxy_data=eff_dxy,
         )
 
         if dxy_payload["relationship"] == DXYRelationship.CONTRADICTING:
@@ -422,7 +440,13 @@ class BiasValidationEngine:
         # -------------------------------------------------------------
         # 8. News / Macro Context
         # -------------------------------------------------------------
-        news_payload = cls.evaluate_news_context(symbol=symbol, news_data=news_data)
+        eff_news = news_data
+        if eff_news is None and structured_state and structured_state.news:
+            eff_news = structured_state.news
+        elif eff_news is None and market_context:
+            eff_news = market_context.get("news")
+
+        news_payload = cls.evaluate_news_context(symbol=symbol, news_data=eff_news)
         if news_payload["risk_level"] in (NewsRiskLevel.HIGH_RISK, NewsRiskLevel.EVENT_IMMINENT, NewsRiskLevel.EVENT_ACTIVE):
             conflicts.append(f"High macro news risk active ({news_payload['risk_level'].value}): {news_payload.get('news_event')}")
 
@@ -493,7 +517,7 @@ class BiasValidationEngine:
                 p_role == SevenHourRelationship.SUPPORT
                 and trend_15m in ("BULLISH", "UNDEFINED")
                 and dxy_payload["relationship"] in (DXYRelationship.SUPPORTIVE, DXYRelationship.NEUTRAL, DXYRelationship.UNAVAILABLE)
-                and news_payload["risk_level"] in (NewsRiskLevel.LOW_RISK, NewsRiskLevel.MEDIUM_RISK)
+                and news_payload["risk_level"] in (NewsRiskLevel.LOW_RISK, NewsRiskLevel.MEDIUM_RISK, NewsRiskLevel.UNAVAILABLE)
             ):
                 bias_quality = BiasQuality.HIGH
                 explanation = "Full structural alignment: HTF Bullish, 7H supportive, and supportive/neutral macro backdrop."
@@ -511,7 +535,7 @@ class BiasValidationEngine:
                 p_role == SevenHourRelationship.SUPPORT
                 and trend_15m in ("BEARISH", "UNDEFINED")
                 and dxy_payload["relationship"] in (DXYRelationship.SUPPORTIVE, DXYRelationship.NEUTRAL, DXYRelationship.UNAVAILABLE)
-                and news_payload["risk_level"] in (NewsRiskLevel.LOW_RISK, NewsRiskLevel.MEDIUM_RISK)
+                and news_payload["risk_level"] in (NewsRiskLevel.LOW_RISK, NewsRiskLevel.MEDIUM_RISK, NewsRiskLevel.UNAVAILABLE)
             ):
                 bias_quality = BiasQuality.HIGH
                 explanation = "Full structural alignment: HTF Bearish, 7H supportive, and supportive/neutral macro backdrop."
@@ -529,6 +553,23 @@ class BiasValidationEngine:
             explanation = "Indeterminate market state without structural dominance."
             status = "NEUTRAL"
 
+        # -------------------------------------------------------------
+        # 11. SMT Divergence Confluence Integration
+        # -------------------------------------------------------------
+        eff_smt = smt_data or (getattr(structured_state, "smt", None) if structured_state else None)
+        smt_payload: Dict[str, Any] = {}
+        if eff_smt:
+            smt_payload = eff_smt if isinstance(eff_smt, dict) else (eff_smt.model_dump() if hasattr(eff_smt, "model_dump") else {})
+            has_div = smt_payload.get("has_smt_divergence", False)
+            conf_bias = smt_payload.get("confluence_bias", "NEUTRAL")
+            if has_div:
+                if conf_bias == htf_bias_dir and bias_quality in (BiasQuality.HIGH, BiasQuality.MODERATE):
+                    bias_quality = BiasQuality.A_PLUS
+                    div_summary = smt_payload.get("active_divergence", {}).get("summary") if isinstance(smt_payload.get("active_divergence"), dict) else "SMT Divergence"
+                    explanation += f" Confirmed by institutional {div_summary}."
+                elif conf_bias != htf_bias_dir and conf_bias in ("BULLISH", "BEARISH"):
+                    conflicts.append(f"SMT divergence ({conf_bias}) contradicts structural bias ({htf_bias_dir})")
+
         return BiasValidationResult(
             symbol=symbol,
             timestamp=ts_iso,
@@ -543,6 +584,7 @@ class BiasValidationEngine:
             session_context=session_payload,
             dxy_context=dxy_payload,
             news_context=news_payload,
+            smt_context=smt_payload,
             conflicts=conflicts,
             missing_data=missing_data,
             explanation=explanation,

@@ -12,6 +12,7 @@ class FinalBiasState(str, Enum):
 
 
 class BiasQuality(str, Enum):
+    A_PLUS = "A_PLUS"
     HIGH = "HIGH"
     MODERATE = "MODERATE"
     LOW = "LOW"
@@ -22,6 +23,7 @@ class SevenHourRelationship(str, Enum):
     SUPPORT = "SUPPORT"
     CONTRADICT = "CONTRADICT"
     NEUTRAL = "NEUTRAL"
+    IN_PROGRESS = "IN_PROGRESS"
     UNAVAILABLE = "UNAVAILABLE"
 
 
@@ -62,6 +64,7 @@ class BiasValidationResult(BaseModel):
     session_context: Dict[str, Any] = Field(default_factory=dict)
     dxy_context: Dict[str, Any] = Field(default_factory=dict)
     news_context: Dict[str, Any] = Field(default_factory=dict)
+    smt_context: Dict[str, Any] = Field(default_factory=dict)
     conflicts: List[str] = Field(default_factory=list)
     missing_data: List[str] = Field(default_factory=list)
     explanation: str

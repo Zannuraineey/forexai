@@ -310,10 +310,10 @@ class DeterministicAIProvider(IAIAnalysisProvider):
             buffer_pips = max(15.0, buffer_pips)
         sl_buffer = buffer_pips * pip_size
 
-        # Check for institutional SMC models
-        is_london_model = "loz tradez" in lower_inst or "3-step" in lower_inst or "manipulation candle" in lower_inst or "london" in lower_inst
-        is_ny_model = "9:30 am" in lower_inst or "judas swing" in lower_inst or "distribution" in lower_inst or "new york" in lower_inst
-        is_asian_model = "tokyo sweep" in lower_inst or "pre-asia" in lower_inst or "mean-reversion" in lower_inst or "asian" in lower_inst
+        # Check for institutional MSNR / Alchemist session models
+        is_london_model = "msnr" in lower_inst or "loz tradez" in lower_inst or "3-step" in lower_inst or "manipulation candle" in lower_inst or "london" in lower_inst
+        is_ny_model = "alchemist" in lower_inst or "daily profile" in lower_inst or "profile #2" in lower_inst or "9:30 am" in lower_inst or "judas swing" in lower_inst or "distribution" in lower_inst or "new york" in lower_inst
+        is_asian_model = "msnr" in lower_inst or "tokyo sweep" in lower_inst or "pre-asia" in lower_inst or "mean-reversion" in lower_inst or "asian" in lower_inst
 
         # Track execution proposal
         trade_proposal: Optional[Dict[str, Any]] = market_context.get("candidate_trade_proposal") or market_context.get("trade_proposal") or None

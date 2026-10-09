@@ -12,6 +12,7 @@ from app.schemas.notification import NotificationRuleConfig
 from app.services.session import SessionEngine
 from app.services.ai import AIAnalysisEngine
 from app.services.notifications import NotificationService
+from app.services.tracking.outcome_tracker import TradeOutcomeTracker
 
 logger = logging.getLogger("forex_ai.session_scanner")
 
@@ -19,7 +20,8 @@ class SessionScannerWorker:
     """
     Automated Continuous Background Session Scanner.
     Autonomously scans watchlist instruments 24/7 across Asian, London, and New York sessions.
-    Evaluates institutional SMC/ICT rules (zero repainting, closed candle wicks, displacement MSS, FVG retest)
+    Evaluates primary Malaysian Support and Resistance (MSNR) & Alchemist rules (zero repainting, closed candle wicks,
+    RBS/SBR flip zones, 50% Consequent Encroachment CE, MISS liquidity sweeps, and Daily Profile #2 NY Reversal SMT)
     and dispatches high-priority push notifications to trader mobile devices before order execution.
     """
 
@@ -210,6 +212,14 @@ class SessionScannerWorker:
                             logger.debug(f"[SessionScanner] Skipping {symbol} {tf}: {ve}")
                         except Exception as e:
                             logger.warning(f"[SessionScanner] Error analyzing {symbol} {tf}: {e}")
+
+                # 4. Monitor post-signal candle lifecycle for all active/pending setups
+                try:
+                    tracked_outcomes = await TradeOutcomeTracker.update_active_outcomes(db)
+                    if tracked_outcomes:
+                        logger.info(f"📊 [SessionScanner] Updated {len(tracked_outcomes)} active/pending trade outcomes.")
+                except Exception as track_err:
+                    logger.debug(f"[SessionScanner] Outcome tracker cycle error: {track_err}")
 
             except Exception as exc:
                 self._last_error = str(exc)

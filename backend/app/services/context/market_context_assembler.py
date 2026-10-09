@@ -278,6 +278,10 @@ class MarketContextAssembler:
         recent_liquidity_sweeps: Optional[List[Any]] = None,
         historical_profile_context: Optional[HistoricalProfileContext] = None,
         seven_hour_config: Optional[SevenHourProfileConfig] = None,
+        dxy_data: Optional[Dict[str, Any]] = None,
+        news_data: Optional[Dict[str, Any]] = None,
+        smt_data: Optional[Dict[str, Any]] = None,
+        msnr_data: Optional[Dict[str, Any]] = None,
     ) -> StructuredMarketState:
         """
         Synthesizes the complete multi-layer StructuredMarketState object.
@@ -336,6 +340,10 @@ class MarketContextAssembler:
             sweeps=recent_liquidity_sweeps,
         )
 
+        # 7. DXY and News Context
+        dxy_ctx = cls.build_dxy_context(symbol, direction="NEUTRAL", dxy_data=dxy_data) if dxy_data is not None else None
+        news_ctx = cls.build_news_context(symbol, news_data=news_data) if news_data is not None else None
+
         return StructuredMarketState(
             symbol=symbol,
             timestamp_utc=ts_utc,
@@ -347,6 +355,10 @@ class MarketContextAssembler:
             liquidity=liq_context,
             profile_vs_session_interaction=interaction,
             historical_profile_context=historical_profile_context,
+            dxy=dxy_ctx or dxy_data,
+            news=news_ctx or news_data,
+            smt=smt_data,
+            msnr=msnr_data,
         )
 
     @classmethod

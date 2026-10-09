@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = Field(default="")
     AI_MODEL_NAME: str = Field(default="gemini-1.5-flash")
 
+    # Security & Encryption
+    ENCRYPTION_MASTER_KEY: str = Field(default="")
+    SECRET_KEY: str = Field(default="forexai_default_secret_key_change_in_production")
+
     # Initial Instruments
     TARGET_INSTRUMENTS: List[str] = [
         "XAUUSD",

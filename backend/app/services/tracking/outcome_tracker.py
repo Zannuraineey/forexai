@@ -34,10 +34,11 @@ class TradeOutcomeTracker:
         setup_snapshot: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         is_long = "BUY" in action.upper() or "LONG" in action.upper()
-        eff_fill = fill_price if fill_price is not None else entry
-        slippage = round(eff_fill - entry, 5)
+        # For calculation reference, use actual fill if known, else signal entry
+        eff_entry = float(fill_price) if fill_price is not None else float(entry)
+        slippage = round(fill_price - entry, 5) if fill_price is not None else None
 
-        risk_dist = round(abs(eff_fill - stop_loss), 5)
+        risk_dist = round(abs(eff_entry - stop_loss), 5)
         safe_risk = max(risk_dist, 1e-6)
 
         tp_target = tp2 or take_profit
@@ -48,10 +49,11 @@ class TradeOutcomeTracker:
             key=lambda c: c.timestamp_utc if c.timestamp_utc.tzinfo else c.timestamp_utc.replace(tzinfo=timezone.utc)
         )
 
-        is_filled = fill_price is not None
-        entry_time = None
+        # Track limit reach vs confirmed fill
+        limit_reached = fill_price is not None
+        entry_time = signal_timestamp_utc if fill_price is not None else None
         exit_time = None
-        outcome = "PENDING"
+        outcome = "ACTIVE" if fill_price is not None else "PENDING"
 
         max_fav = 0.0
         max_adv = 0.0
@@ -83,30 +85,30 @@ class TradeOutcomeTracker:
         for c in candles:
             c_ts = c.timestamp_utc if c.timestamp_utc.tzinfo else c.timestamp_utc.replace(tzinfo=timezone.utc)
 
-            # Check for fill if limit order not yet executed
-            if not is_filled:
+            # Check if limit entry was reached by subsequent price action
+            if not limit_reached:
                 if is_long:
                     # BUY LIMIT triggers if price dips to or below entry
-                    if c.low <= entry:
-                        is_filled = True
+                    if float(c.low) <= entry:
+                        limit_reached = True
                         entry_time = c_ts
                         time_to_entry = (c_ts - sig_ts).total_seconds()
                         outcome = "ACTIVE"
                 else:
                     # SELL LIMIT triggers if price rises to or above entry
-                    if c.high >= entry:
-                        is_filled = True
+                    if float(c.high) >= entry:
+                        limit_reached = True
                         entry_time = c_ts
                         time_to_entry = (c_ts - sig_ts).total_seconds()
                         outcome = "ACTIVE"
 
-            if not is_filled:
+            if not limit_reached:
                 continue
 
             # Tracking while ACTIVE
             if is_long:
-                fav = max(0.0, float(c.high) - eff_fill)
-                adv = max(0.0, eff_fill - float(c.low))
+                fav = max(0.0, float(c.high) - eff_entry)
+                adv = max(0.0, eff_entry - float(c.low))
                 if fav > max_fav:
                     max_fav = fav
                 if adv > max_adv:
@@ -134,25 +136,33 @@ class TradeOutcomeTracker:
                     reached_20r = True
                     time_to_20r = (c_ts - sig_ts).total_seconds()
 
-                # Check SL hit
-                if float(c.low) <= stop_loss:
+                sl_hit = float(c.low) <= stop_loss
+                tp_hit = float(c.high) >= tp_target
+
+                # Ambiguous intrabar breach: both TP and SL hit in same candle
+                if sl_hit and tp_hit:
+                    outcome = "AMBIGUOUS_INTRABAR"
+                    exit_time = c_ts
+                    time_to_sl = (c_ts - sig_ts).total_seconds()
+                    time_to_tp = time_to_sl
+                    realized_r = 0.0
+                    break
+                elif sl_hit:
                     outcome = "SL_HIT"
                     exit_time = c_ts
                     time_to_sl = (c_ts - sig_ts).total_seconds()
                     realized_r = -1.0
                     break
-
-                # Check TP hit
-                if float(c.high) >= tp_target:
+                elif tp_hit:
                     outcome = "TP_HIT"
                     exit_time = c_ts
                     time_to_tp = (c_ts - sig_ts).total_seconds()
-                    realized_r = round((tp_target - eff_fill) / safe_risk, 2)
+                    realized_r = round((tp_target - eff_entry) / safe_risk, 2)
                     break
 
             else:  # is_short
-                fav = max(0.0, eff_fill - float(c.low))
-                adv = max(0.0, float(c.high) - eff_fill)
+                fav = max(0.0, eff_entry - float(c.low))
+                adv = max(0.0, float(c.high) - eff_entry)
                 if fav > max_fav:
                     max_fav = fav
                 if adv > max_adv:
@@ -179,18 +189,28 @@ class TradeOutcomeTracker:
                     reached_20r = True
                     time_to_20r = (c_ts - sig_ts).total_seconds()
 
-                if float(c.high) >= stop_loss:
+                sl_hit = float(c.high) >= stop_loss
+                tp_hit = float(c.low) <= tp_target
+
+                # Ambiguous intrabar breach: both TP and SL hit in same candle
+                if sl_hit and tp_hit:
+                    outcome = "AMBIGUOUS_INTRABAR"
+                    exit_time = c_ts
+                    time_to_sl = (c_ts - sig_ts).total_seconds()
+                    time_to_tp = time_to_sl
+                    realized_r = 0.0
+                    break
+                elif sl_hit:
                     outcome = "SL_HIT"
                     exit_time = c_ts
                     time_to_sl = (c_ts - sig_ts).total_seconds()
                     realized_r = -1.0
                     break
-
-                if float(c.low) <= tp_target:
+                elif tp_hit:
                     outcome = "TP_HIT"
                     exit_time = c_ts
                     time_to_tp = (c_ts - sig_ts).total_seconds()
-                    realized_r = round((eff_fill - tp_target) / safe_risk, 2)
+                    realized_r = round((eff_entry - tp_target) / safe_risk, 2)
                     break
 
         mfe_r = round(max_fav / safe_risk, 4) if risk_dist > 0 else 0.0
@@ -201,7 +221,7 @@ class TradeOutcomeTracker:
             "symbol": symbol,
             "direction": "BUY" if is_long else "SELL",
             "entry_signal": entry,
-            "fill_price": eff_fill,
+            "fill_price": fill_price,  # Only known if confirmed broker fill provided
             "slippage": slippage,
             "stop_loss": stop_loss,
             "take_profit": tp_target,
@@ -229,6 +249,110 @@ class TradeOutcomeTracker:
             "realized_r_multiple": realized_r,
             "setup_snapshot": setup_snapshot or {},
         }
+
+    @classmethod
+    async def persist_candidate_setup(
+        cls,
+        db_session: AsyncSession,
+        setup_id: str,
+        symbol: str,
+        direction: str,
+        entry_price: float,
+        stop_loss: float,
+        take_profit: float,
+        signal_timestamp_utc: datetime,
+        setup_snapshot: Optional[Dict[str, Any]] = None,
+    ) -> TradeSetupOutcome:
+        """
+        Persists a candidate setup uniquely identified and idempotently.
+        Preserves original setup context with UTC timestamps.
+        """
+        if signal_timestamp_utc.tzinfo is None:
+            sig_ts = signal_timestamp_utc.replace(tzinfo=timezone.utc)
+        else:
+            sig_ts = signal_timestamp_utc.astimezone(timezone.utc)
+
+        data = {
+            "setup_id": setup_id,
+            "symbol": symbol.upper(),
+            "direction": direction.upper(),
+            "entry_signal": entry_price,
+            "fill_price": None,  # Not known yet; not simulating broker fill
+            "slippage": None,
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+            "signal_timestamp_utc": sig_ts,
+            "outcome": "PENDING",
+            "setup_snapshot": setup_snapshot or {},
+        }
+        return await cls.persist_outcome(db_session, data)
+
+    @classmethod
+    async def update_active_outcomes(
+        cls,
+        db_session: AsyncSession,
+        symbol: Optional[str] = None,
+    ) -> List[TradeSetupOutcome]:
+        """
+        Monitors subsequent market candles for all PENDING and ACTIVE setups.
+        Records limit reach, MFE, MAE, R milestones, and final TP/SL/Ambiguous outcomes.
+        Idempotent: repeatedly executing across the same candle history maintains state consistency.
+        """
+        from app.models.candle import Candle
+        from app.models.instrument import Instrument
+
+        query = select(TradeSetupOutcome).where(TradeSetupOutcome.outcome.in_(["PENDING", "ACTIVE"]))
+        if symbol:
+            query = query.where(TradeSetupOutcome.symbol == symbol.upper())
+
+        res = await db_session.execute(query)
+        active_setups = list(res.scalars().all())
+
+        updated_records = []
+        for setup in active_setups:
+            # Fetch subsequent candles chronologically
+            c_stmt = (
+                select(Candle)
+                .join(Instrument, Candle.instrument_id == Instrument.id)
+                .where(
+                    Instrument.symbol == setup.symbol.upper(),
+                    Candle.timestamp_utc > setup.signal_timestamp_utc,
+                )
+                .order_by(Candle.timestamp_utc.asc())
+                .limit(200)
+            )
+            c_res = await db_session.execute(c_stmt)
+            candles_raw = c_res.scalars().all()
+            if not candles_raw:
+                continue
+
+            subsequent_candles = [CandleRead.model_validate(c) for c in candles_raw]
+
+            evaluated = cls.evaluate_candles_lifecycle(
+                setup_id=setup.setup_id,
+                symbol=setup.symbol,
+                action=setup.direction,
+                entry=float(setup.entry_signal),
+                stop_loss=float(setup.stop_loss),
+                take_profit=float(setup.take_profit),
+                signal_timestamp_utc=setup.signal_timestamp_utc,
+                subsequent_candles=subsequent_candles,
+                fill_price=float(setup.fill_price) if setup.fill_price is not None else None,
+                setup_snapshot=setup.setup_snapshot,
+            )
+
+            # Idempotently update setup attributes
+            for k, v in evaluated.items():
+                if hasattr(setup, k):
+                    setattr(setup, k, v)
+            updated_records.append(setup)
+
+        if updated_records:
+            await db_session.commit()
+            for r in updated_records:
+                await db_session.refresh(r)
+
+        return updated_records
 
     @classmethod
     async def persist_outcome(

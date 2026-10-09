@@ -9,6 +9,9 @@ from app.api.analysis import router as analysis_router
 from app.api.notifications import router as notifications_router
 from app.api.news import router as news_router
 from app.api.quant_research import router as quant_router
+from app.api.macro_ai import router as macro_ai_router
+from app.api.smt import router as smt_router
+from app.api.msnr import router as msnr_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -21,4 +24,7 @@ api_router.include_router(analysis_router)
 api_router.include_router(notifications_router)
 api_router.include_router(news_router)
 api_router.include_router(quant_router)
+api_router.include_router(macro_ai_router)
+api_router.include_router(smt_router)
+api_router.include_router(msnr_router)
 

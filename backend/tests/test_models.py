@@ -92,7 +92,8 @@ async def test_candle_service_idempotent_save(db_session):
     saved_second = await service.save_candles(candles)
     assert saved_second >= 0
 
-    # Verify only one candle exists in database
+    # Verify only one candle exists in database for this specific timestamp
     retrieved = await service.get_candles("XAUUSD", "1h")
-    assert len(retrieved) == 1
-    assert retrieved[0].close == 2655.0
+    matching = [c for c in retrieved if c.timestamp_utc.strftime("%Y-%m-%d %H:%M") == ts.strftime("%Y-%m-%d %H:%M")]
+    assert len(matching) == 1
+    assert matching[0].close == 2655.0

@@ -22,6 +22,7 @@ class TargetRealismAnalyzer:
         daily_low: Optional[float] = None,
         nearest_liquidity_high: Optional[float] = None,
         nearest_liquidity_low: Optional[float] = None,
+        historical_outcomes: Optional[List[Any]] = None,
     ) -> TargetRealismMetrics:
         is_long = "BUY" in action.upper() or "LONG" in action.upper()
 
@@ -85,6 +86,28 @@ class TargetRealismAnalyzer:
                 "session dealing range and ATR expectations."
             )
 
+        # Policy tagging
+        if classification == TargetClassification.TARGET_BEYOND_AVAILABLE_CONTEXT:
+            policy_applied = "POLICY_FLAGGED_BEYOND_CONTEXT"
+        elif classification == TargetClassification.EXTREME_TARGET:
+            policy_applied = "POLICY_ALLOWED_EXTREME_TARGET_WITH_TAGGING"
+        elif classification == TargetClassification.EXTENDED_TARGET:
+            policy_applied = "POLICY_ALLOWED_EXTENDED_TARGET"
+        else:
+            policy_applied = "POLICY_ALLOWED_NORMAL_TARGET"
+
+        # Statistical support evaluation: strictly data-backed, never invented
+        stat_status = "INSUFFICIENT_DATA"
+        sample_count = len(historical_outcomes) if historical_outcomes is not None else 0
+        hit_rate = None
+
+        if historical_outcomes and len(historical_outcomes) >= 30:
+            hits = sum(1 for o in historical_outcomes if getattr(o, "outcome", "") in ("TP_HIT", "TP1_HIT", "TP2_HIT") or float(getattr(o, "mfe_r_multiple", 0) or 0) >= rr_ratio)
+            hit_rate = round(hits / len(historical_outcomes), 4)
+            stat_status = "STATISTICALLY_SUPPORTED" if hit_rate >= 0.40 else "STATISTICALLY_UNSUPPORTED"
+        elif historical_outcomes and len(historical_outcomes) > 0:
+            stat_status = "INSUFFICIENT_DATA"
+
         return TargetRealismMetrics(
             risk_distance=risk_dist,
             reward_distance=reward_dist,
@@ -101,6 +124,10 @@ class TargetRealismAnalyzer:
             distance_to_daily_low=dist_dl,
             classification=classification,
             classification_reason=reason,
+            policy_applied=policy_applied,
+            statistical_support_status=stat_status,
+            historical_sample_size=sample_count if sample_count > 0 else None,
+            historical_hit_rate=hit_rate,
         )
 
     @classmethod
@@ -119,6 +146,7 @@ class TargetRealismAnalyzer:
         daily_low: Optional[float] = None,
         nearest_liquidity_high: Optional[float] = None,
         nearest_liquidity_low: Optional[float] = None,
+        historical_outcomes: Optional[List[Any]] = None,
     ) -> TargetRealismMetrics:
         """Alias for evaluate_target accepting symbol and direction."""
         return cls.evaluate_target(
@@ -134,4 +162,5 @@ class TargetRealismAnalyzer:
             daily_low=daily_low,
             nearest_liquidity_high=nearest_liquidity_high,
             nearest_liquidity_low=nearest_liquidity_low,
+            historical_outcomes=historical_outcomes,
         )

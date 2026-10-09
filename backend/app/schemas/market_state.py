@@ -132,5 +132,9 @@ class StructuredMarketState(BaseModel):
     liquidity: LiquidityContext
     profile_vs_session_interaction: ProfileSessionInteraction
     historical_profile_context: Optional[HistoricalProfileContext] = None
+    dxy: Optional[Dict[str, Any]] = None
+    news: Optional[Dict[str, Any]] = None
+    smt: Optional[Dict[str, Any]] = None
+    msnr: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(from_attributes=True)

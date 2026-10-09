@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from app.core.config import settings
 from app.core.database import Base
+import app.models  # noqa: F401 - ensure all tables are registered in Base.metadata
 
 # Force test mode
 os.environ["ENVIRONMENT"] = "test"

@@ -28,5 +28,9 @@ class TargetRealismMetrics(BaseModel):
     distance_to_daily_low: Optional[float] = None
     classification: TargetClassification
     classification_reason: str
+    policy_applied: str = "STRUCTURAL_ALLOW_WITH_TAGGING"
+    statistical_support_status: str = "INSUFFICIENT_DATA"
+    historical_sample_size: Optional[int] = None
+    historical_hit_rate: Optional[float] = None
 
     model_config = ConfigDict(from_attributes=True)

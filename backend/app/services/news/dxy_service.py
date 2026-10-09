@@ -20,22 +20,23 @@ class DXYService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_latest_price(self, symbol: str) -> Optional[float]:
-        """Fetches latest closed candle close price for a symbol."""
+    async def get_latest_price(self, symbol: str, as_of_timestamp: Optional[datetime] = None) -> Optional[float]:
+        """Fetches latest closed candle close price for a symbol as of a specific timestamp."""
         if not self.db:
             return None
         stmt = (
             select(Candle.close)
             .join(Instrument, Candle.instrument_id == Instrument.id)
             .where(Instrument.symbol == symbol.upper())
-            .order_by(desc(Candle.timestamp_utc))
-            .limit(1)
         )
+        if as_of_timestamp is not None:
+            stmt = stmt.where(Candle.timestamp_utc <= as_of_timestamp)
+        stmt = stmt.order_by(desc(Candle.timestamp_utc)).limit(1)
         res = await self.db.execute(stmt)
         val = res.scalar_one_or_none()
         return float(val) if val is not None else None
 
-    async def get_recent_candles(self, symbol: str, limit: int = 50) -> List[Candle]:
+    async def get_recent_candles(self, symbol: str, limit: int = 50, as_of_timestamp: Optional[datetime] = None) -> List[Candle]:
         """Fetches chronological recent candles for technical/SMC evaluation."""
         if not self.db:
             return []
@@ -43,30 +44,45 @@ class DXYService:
             select(Candle)
             .join(Instrument, Candle.instrument_id == Instrument.id)
             .where(Instrument.symbol == symbol.upper(), Candle.timeframe.in_(["15m", "1h", "1m"]))
-            .order_by(desc(Candle.timestamp_utc))
-            .limit(limit)
         )
+        if as_of_timestamp is not None:
+            stmt = stmt.where(Candle.timestamp_utc <= as_of_timestamp)
+        stmt = stmt.order_by(desc(Candle.timestamp_utc)).limit(limit)
         res = await self.db.execute(stmt)
         candles = list(res.scalars().all())
         candles.reverse()
         return candles
 
-    async def calculate_dxy_index(self) -> DXYMetrics:
+    async def calculate_dxy_index(
+        self,
+        as_of_timestamp: Optional[datetime] = None,
+        allow_synthetic_fallback: bool = False,
+    ) -> Optional[DXYMetrics]:
         """
         Computes institutional DXY level from constituent majors or USD basket.
         Formula: 50.14348112 * (EURUSD^-0.576) * (USDJPY^0.136) * (GBPUSD^-0.119) * (USDCAD^0.091) * (USDCHF^0.036)
+        Returns None if constituent real data is unavailable when allow_synthetic_fallback is False.
         """
-        # 1. Check if direct USD basket (WLDUSD) is present with live data
-        basket_price = await self.get_latest_price("WLDUSD")
-        
-        # 2. Get constituent major prices (strictly float)
-        eur = float(await self.get_latest_price("EURUSD") or 1.1240)
-        gbp = float(await self.get_latest_price("GBPUSD") or 1.3240)
-        jpy = float(await self.get_latest_price("USDJPY") or 158.20)
-        cad = float(await self.get_latest_price("USDCAD") or 1.4270)
-        chf = float(await self.get_latest_price("USDCHF") or 0.8315)
+        # 1. Fetch constituent major prices
+        eur = await self.get_latest_price("EURUSD", as_of_timestamp)
+        gbp = await self.get_latest_price("GBPUSD", as_of_timestamp)
+        jpy = await self.get_latest_price("USDJPY", as_of_timestamp)
+        cad = await self.get_latest_price("USDCAD", as_of_timestamp)
+        chf = await self.get_latest_price("USDCHF", as_of_timestamp)
 
-        # 3. Calculate DXY via standard geometric weighted basket
+        # In strict trading mode, never fabricate values
+        if not allow_synthetic_fallback:
+            if any(p is None or p <= 0 for p in [eur, gbp, jpy, cad, chf]):
+                logger.info("One or more DXY basket constituents missing from database. Returning None (UNAVAILABLE).")
+                return None
+        else:
+            eur = eur or 1.0850
+            gbp = gbp or 1.2950
+            jpy = jpy or 154.20
+            cad = cad or 1.3850
+            chf = chf or 0.8820
+
+        # 2. Calculate DXY via standard geometric weighted basket
         try:
             dxy_val = 50.14348112 * (
                 math.pow(eur, -0.576)
@@ -75,17 +91,15 @@ class DXYService:
                 * math.pow(cad, 0.091)
                 * math.pow(chf, 0.036)
             )
-            # Normalize to standard DXY index scale (~100.0 - 106.0)
             dxy_val = round(float(dxy_val), 3)
         except Exception as e:
-            logger.warning(f"Error computing standard DXY formula: {e}. Fallback to benchmark index.")
-            dxy_val = 104.25
+            logger.warning(f"Error computing standard DXY formula: {e}.")
+            return None
 
-        # 4. Technical and SMC Structure Analysis using constituent price action (EURUSD inverse proxy)
-        eur_candles = await self.get_recent_candles("EURUSD", limit=30)
+        # 3. Technical and SMC Structure Analysis using constituent price action (EURUSD inverse proxy)
+        eur_candles = await self.get_recent_candles("EURUSD", limit=30, as_of_timestamp=as_of_timestamp)
         closes = [float(c.close) for c in eur_candles] if eur_candles else [eur]
-        
-        # Invert EUR closes to represent DXY trend
+
         dxy_closes = []
         for c_val in closes:
             try:
@@ -104,14 +118,12 @@ class DXYService:
         if len(dxy_closes) >= 2 and dxy_closes[0] > 0:
             change_pct = round(((dxy_closes[-1] - dxy_closes[0]) / dxy_closes[0]) * 100, 2)
         else:
-            change_pct = 0.08
+            change_pct = 0.0
 
-        # Calculate EMA 200 proxy & RSI 14
         ema_200 = round(sum(dxy_closes) / len(dxy_closes), 3) if dxy_closes else dxy_val
         rsi_14 = self._calculate_rsi(dxy_closes, period=14)
 
         # SMC Structure on DXY
-        trend = "BULLISH" if dxy_val > ema_200 else ("BEARISH" if dxy_val < ema_200 else "CONSOLIDATING")
         if change_pct > 0.15:
             trend = "BULLISH"
             market_regime = "RISK_OFF"
@@ -127,7 +139,7 @@ class DXYService:
         else:
             trend = "CONSOLIDATING"
             market_regime = "NEUTRAL"
-            smc_structure = "DXY Asian/London Range Bound; Accumulation Phase inside Session Dealing Range."
+            smc_structure = "DXY Range Bound; Accumulation Phase inside Session Dealing Range."
             conf_status = "NEUTRAL"
             displacement = False
 

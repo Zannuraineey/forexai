@@ -59,7 +59,7 @@ class NewsIntelligenceEngine:
             event = all_events[0] if all_events else self.calendar_service._svc._generate_dynamic_live_schedule()[0]
 
         # 2. Compute Live Real-time DXY Metrics & SMC Trajectory from live price feeds
-        dxy = await self.dxy_service.calculate_dxy_index()
+        dxy = await self.dxy_service.calculate_dxy_index(allow_synthetic_fallback=True)
 
         # 3. Pull live pair pricing & technical levels for requested pairs
         pair_data = await self._fetch_pairs_live_data(req.user_pairs, dxy)
@@ -133,7 +133,7 @@ class NewsIntelligenceEngine:
     # INTERACTIVE CONVERSATIONAL QUERY ("Ask AI Macro Analyst")
     # -------------------------------------------------------------
     async def answer_ai_query(self, req: AIQueryRequest) -> AIQueryResponse:
-        dxy = await self.dxy_service.calculate_dxy_index()
+        dxy = await self.dxy_service.calculate_dxy_index(allow_synthetic_fallback=True)
         pair_data = await self._fetch_pairs_live_data(req.user_pairs, dxy)
         events = self.calendar_service.get_all_events()
 
@@ -290,43 +290,26 @@ class NewsIntelligenceEngine:
         return None
 
     async def _call_llm_api(self, prompt: str, api_key: str, model: str) -> Optional[str]:
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            # 1. Google Gemini
-            if "gemini" in model.lower() or api_key.startswith("AIza"):
-                gemini_model = model if "gemini" in model else "gemini-1.5-flash"
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={api_key}"
-                payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.2, "response_mime_type": "application/json"}
-                }
-                res = await client.post(url, json=payload)
-                if res.status_code == 200:
-                    data = res.json()
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            return parts[0].get("text", "")
-            # 2. OpenAI / Compatible
-            else:
-                url = "https://api.openai.com/v1/chat/completions"
-                payload = {
-                    "model": model if model and "gpt" in model else "gpt-4o-mini",
-                    "messages": [
-                        {"role": "system", "content": "You are a quantitative institutional FX strategist. Output JSON only."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": 0.2,
-                    "response_format": {"type": "json_object"}
-                }
-                headers = {"Authorization": f"Bearer {api_key}"}
-                res = await client.post(url, json=payload, headers=headers)
-                if res.status_code == 200:
-                    data = res.json()
-                    choices = data.get("choices", [])
-                    if choices:
-                        return choices[0].get("message", {}).get("content", "")
-        return None
+        from app.services.ai.providers.registry import AIProviderRegistry
+        # Infer provider from api_key prefix or model name
+        if api_key.startswith("gsk_") or "llama" in model.lower() or "mixtral" in model.lower():
+            p_id = "groq"
+        elif api_key.startswith("xai-") or "grok" in model.lower():
+            p_id = "xai"
+        elif "gemini" in model.lower() or api_key.startswith("AIza") or api_key.startswith("AQ."):
+            p_id = "gemini"
+        elif "deepseek" in model.lower():
+            p_id = "deepseek"
+        else:
+            p_id = "openai"
+
+        provider = AIProviderRegistry.create_provider(
+            provider_id=p_id,
+            api_key=api_key,
+            model=model,
+        )
+        raw_text, _ = await provider.generate_macro_reasoning(prompt, timeout_seconds=25.0)
+        return raw_text
 
     def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
         try:

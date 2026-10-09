@@ -24,7 +24,7 @@ async def test_economic_calendar_service():
 @pytest.mark.asyncio
 async def test_dxy_service(db_session):
     dxy_service = DXYService(db_session)
-    dxy = await dxy_service.calculate_dxy_index()
+    dxy = await dxy_service.calculate_dxy_index(allow_synthetic_fallback=True)
     
     assert dxy.value > 0
     assert dxy.trend in ["BULLISH", "BEARISH", "CONSOLIDATING"]
@@ -36,8 +36,10 @@ async def test_dxy_service(db_session):
 @pytest.mark.asyncio
 async def test_news_intelligence_synthesis(db_session):
     engine = NewsIntelligenceEngine(db_session)
+    usd_event = next((e for e in EconomicCalendarService().get_all_events() if e.currency == "USD"), None)
     req = NewsIntelligenceRequest(
-        user_pairs=["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"]
+        user_pairs=["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"],
+        event_id=usd_event.id if usd_event else None,
     )
     report = await engine.generate_intelligence_report(req)
     

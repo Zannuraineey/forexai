@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
+from app.core.logging import logger
 
 from app.models.instrument import Instrument
 from app.models.candle import Candle
@@ -22,6 +23,9 @@ from app.services.strategy_service import StrategyService
 from app.services.context.market_context_assembler import MarketContextAssembler
 from app.services.ai.provider_interface import IAIAnalysisProvider
 from app.services.ai.deterministic_provider import DeterministicAIProvider
+from app.services.news.dxy_service import DXYService
+from app.services.news.economic_calendar_service import EconomicCalendarService
+from app.services.tracking.outcome_tracker import TradeOutcomeTracker
 
 class AIAnalysisEngine:
     """
@@ -67,10 +71,14 @@ class AIAnalysisEngine:
         candles = [CandleRead.model_validate(c) for c in reversed(candles_raw)]
         current_candle = candles[-1]
 
-        # Fetch daily candles for PDH/PDL and reference levels
+        # Fetch daily candles for PDH/PDL and reference levels (no look-ahead)
         d_stmt = (
             select(Candle)
-            .where(Candle.instrument_id == instrument.id, Candle.timeframe == "1d")
+            .where(
+                Candle.instrument_id == instrument.id,
+                Candle.timeframe == "1d",
+                Candle.timestamp_utc <= current_candle.timestamp_utc,
+            )
             .order_by(desc(Candle.timestamp_utc))
             .limit(30)
         )
@@ -88,13 +96,17 @@ class AIAnalysisEngine:
             pip_size=pip_size,
         )
 
-        # 3b. Multi-Timeframe Context & 7H Profile Assembly
+        # 3b. Multi-Timeframe Context & 7H Profile Assembly (strictly aligned to setup timestamp)
         async def _fetch_tf_candles(tf: str) -> List[CandleRead]:
             if tf == timeframe:
                 return candles
             q = (
                 select(Candle)
-                .where(Candle.instrument_id == instrument.id, Candle.timeframe == tf)
+                .where(
+                    Candle.instrument_id == instrument.id,
+                    Candle.timeframe == tf,
+                    Candle.timestamp_utc <= current_candle.timestamp_utc,
+                )
                 .order_by(desc(Candle.timestamp_utc))
                 .limit(60)
             )
@@ -113,6 +125,52 @@ class AIAnalysisEngine:
             timeframe: candles,
         }
 
+        # 3c. Real, timestamp-aligned DXY and Macro News Intelligence
+        dxy_svc = DXYService(self.db)
+        dxy_metrics = await dxy_svc.calculate_dxy_index(as_of_timestamp=current_candle.timestamp_utc)
+        if dxy_metrics:
+            dxy_data = {
+                "direction": dxy_metrics.trend,
+                "trend": dxy_metrics.trend,
+                "trend_strength": dxy_metrics.confirmation_status,
+                "change": dxy_metrics.change_pct,
+                "change_pct": dxy_metrics.change_pct,
+                "value": dxy_metrics.value,
+                "source": dxy_metrics.source,
+            }
+        else:
+            dxy_data = {
+                "dxy_direction": "UNAVAILABLE",
+                "dxy_trend_strength": None,
+                "dxy_change": None,
+                "dxy_relationship_to_symbol": "UNAVAILABLE",
+            }
+
+        cal_svc = EconomicCalendarService()
+        news_data = cal_svc.get_news_risk_at(
+            symbol=symbol,
+            timestamp_utc=current_candle.timestamp_utc,
+            window_minutes=60,
+        )
+
+        from app.services.features.msnr_engine import MSNREngine
+        from app.services.features.smt_engine import SMTEngine
+
+        smt_ctx = await SMTEngine.evaluate_smt_for_symbol(
+            symbol=symbol,
+            db=self.db,
+            timeframe=timeframe,
+            session_levels=context_snapshot.session_state.session_levels if context_snapshot.session_state else None,
+        )
+        msnr_analysis = MSNREngine.analyze(
+            symbol=symbol,
+            candles=candles,
+            smt_divergence=smt_ctx.active_divergence,
+            pip_size=pip_size,
+        )
+        msnr_data = msnr_analysis.model_dump()
+        smt_data = smt_ctx.model_dump()
+
         structured_state = MarketContextAssembler.assemble(
             symbol=symbol,
             requested_timeframe=timeframe,
@@ -122,8 +180,14 @@ class AIAnalysisEngine:
             market_structure=context_snapshot.market_structure,
             reference_levels=context_snapshot.reference_levels,
             recent_liquidity_sweeps=context_snapshot.recent_liquidity_sweeps,
+            dxy_data=dxy_data,
+            news_data=news_data,
+            smt_data=smt_data,
+            msnr_data=msnr_data,
         )
         context_snapshot.structured_market_state = structured_state
+        context_snapshot.dxy = dxy_data
+        context_snapshot.news = news_data
 
         # 4. Resolve Active Session
         session_name = request.session_name
@@ -227,6 +291,30 @@ class AIAnalysisEngine:
 
         await self.db.commit()
         await self.db.refresh(record)
+
+        # 9. Persist Candidate Setup in TradeOutcomeTracker if VALID_SETUP
+        if ai_output.trade_setup and ai_output.state == AnalysisStateEnum.VALID_SETUP:
+            ts_unix = int(current_candle.timestamp_utc.timestamp())
+            cand_setup_id = f"setup_{symbol}_{timeframe}_{ts_unix}"
+            ts_snapshot_dict = {}
+            if ai_output.setup_snapshot:
+                ts_snapshot_dict = ai_output.setup_snapshot.model_dump()
+            elif ai_output.trade_setup.setup_snapshot:
+                ts_snapshot_dict = ai_output.trade_setup.setup_snapshot.model_dump()
+            try:
+                await TradeOutcomeTracker.persist_candidate_setup(
+                    db_session=self.db,
+                    setup_id=cand_setup_id,
+                    symbol=symbol,
+                    direction=ai_output.trade_setup.action,
+                    entry_price=ai_output.trade_setup.entry_price,
+                    stop_loss=ai_output.trade_setup.stop_loss,
+                    take_profit=ai_output.trade_setup.take_profit,
+                    signal_timestamp_utc=current_candle.timestamp_utc,
+                    setup_snapshot=ts_snapshot_dict,
+                )
+            except Exception as e:
+                logger.warning(f"Could not persist candidate trade setup outcome: {e}")
 
         return AnalysisRecordRead(
             id=record.id,

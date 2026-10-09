@@ -76,7 +76,8 @@ async def test_candles_query_endpoint(db_session):
         assert res.status_code == 200
         candles = res.json()
         assert len(candles) >= 1
-        assert candles[0]["open"] == 1.0850
-        assert candles[0]["close"] == 1.0860
+        target_c = next((c for c in candles if c["open"] == 1.0850), None)
+        assert target_c is not None
+        assert target_c["close"] == 1.0860
 
     app.dependency_overrides.clear()

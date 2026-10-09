@@ -53,7 +53,7 @@ class TradeSetupOutcome(Base):
     reached_tp: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     
     outcome: Mapped[str] = mapped_column(String(32), default="PENDING", nullable=False) # PENDING, ACTIVE, TP1_HIT, TP2_HIT, SL_HIT, STOPPED_OUT, EXPIRED, CANCELLED
-    realized_r_multiple: Mapped[float] = mapped_column(Numeric(10, 4), nullable=True)
+    realized_r_multiple: Mapped[Optional[float]] = mapped_column(Numeric(10, 4), nullable=True)
     
     # Context snapshot
     setup_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)

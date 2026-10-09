@@ -97,8 +97,9 @@ async def test_duplicate_candle_prevention(db_session):
     assert saved_second >= 0
 
     # Database unique constraint (instrument_id, timeframe, timestamp_utc) ensures strictly 1 row
-    candles = await service.get_candles("GBPUSD", "15m", limit=10)
-    assert len(candles) == 1
+    candles = await service.get_candles("GBPUSD", "15m", start_utc=ts - timedelta(hours=1), end_utc=ts + timedelta(hours=1))
+    matching = [c for c in candles if c.timestamp_utc.strftime("%Y-%m-%d %H:%M") == ts.strftime("%Y-%m-%d %H:%M")]
+    assert len(matching) == 1
 
 @pytest.mark.asyncio
 async def test_duplicate_analysis_and_notification_prevention(db_session):
