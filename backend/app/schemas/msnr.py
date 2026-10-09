@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
-from .smt import SMTDivergenceDetail
+from app.schemas.smt import SMTDivergenceDetail
 
 
 class MSNRZoneType(str, Enum):

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -143,7 +143,7 @@ async def test_msnr_dispatch(
     Triggers an immediate test MSNR Key Level setup push notification to all registered FCM devices.
     Includes 50% Consequent Encroachment (CE), Classic V zone, and SMT Divergence.
     """
-    service = NotificationService(db)
+    service: Any = NotificationService(db)
     test_setup = {
         "direction": direction.upper(),
         "setup_type": "DAILY_PROFILE_2_NY_REVERSAL",

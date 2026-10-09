@@ -89,13 +89,13 @@ from app.schemas.quant_research import (
     QuantResearchReport,
     CandidateEdgeEvaluationRequest,
 )
-from .smt import (
+from app.schemas.smt import (
     SMTDivergenceDetail,
     SMTDivergenceType,
     SMTPairGroup,
     SMTContext,
 )
-from .msnr import (
+from app.schemas.msnr import (
     MSNRZoneType,
     MSNRZoneQuality,
     MSNRZone,
