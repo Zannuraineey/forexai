@@ -454,6 +454,155 @@ class NotificationService:
         logger.info(f"Dispatched UT Bot notification {record.id} for {sym} ({sent_count} live FCM delivered).")
         return NotificationRead.model_validate(record)
 
+    async def dispatch_msnr_setup_alert(
+        self,
+        symbol: str,
+        setup: Any,
+        timeframe: str = "15m",
+        user_id: int = 1,
+        rule_cfg: Optional[NotificationRuleConfig] = None,
+    ) -> Optional[NotificationRead]:
+        """
+        Dispatches a high-priority FCM push alert for validated MSNR / Alchemist Playbook setups
+        featuring Key Levels (Classic A, Classic V, RBS, SBR) and 50% Consequent Encroachment (CE).
+        """
+        cfg = rule_cfg or self.DEFAULT_CONFIG
+        sym = symbol.upper()
+
+        if cfg.symbols_whitelist and sym not in [s.upper() for s in cfg.symbols_whitelist]:
+            logger.debug(f"MSNR alert skipped: {sym} not in whitelist.")
+            return None
+
+        # Extract setup attributes whether Pydantic or Dict
+        if isinstance(setup, dict):
+            direction = str(setup.get("direction", "BULLISH")).upper()
+            action = "BUY LIMIT" if direction == "BULLISH" else "SELL LIMIT"
+            setup_type = str(setup.get("setup_type", "MSNR_KEY_LEVEL")).replace("_", " ")
+            entry = float(setup.get("entry_price", 0.0))
+            sl = float(setup.get("stop_loss", 0.0))
+            tp1 = float(setup.get("target_1", 0.0))
+            tp2 = float(setup.get("target_2", 0.0))
+            rr = float(setup.get("risk_reward", 2.0))
+            phase = str(setup.get("session_phase", "Active Session")).replace("_", " ")
+            smt = setup.get("smt_confluence")
+            smt_str = f" • SMT: {smt.get('divergence_type', 'Confirmed')}" if (isinstance(smt, dict) and smt) else ""
+            summary = str(setup.get("summary", ""))
+        else:
+            direction = str(getattr(setup, "direction", "BULLISH")).upper()
+            action = "BUY LIMIT" if direction == "BULLISH" else "SELL LIMIT"
+            setup_type = str(getattr(setup, "setup_type", "MSNR_KEY_LEVEL")).replace("_", " ")
+            entry = float(getattr(setup, "entry_price", 0.0))
+            sl = float(getattr(setup, "stop_loss", 0.0))
+            tp1 = float(getattr(setup, "target_1", 0.0))
+            tp2 = float(getattr(setup, "target_2", 0.0))
+            rr = float(getattr(setup, "risk_reward", 2.0))
+            phase = str(getattr(setup, "session_phase", "Active Session")).replace("_", " ")
+            smt = getattr(setup, "smt_confluence", None)
+            smt_str = f" • SMT: {smt.divergence_type}" if (smt and hasattr(smt, "divergence_type")) else ""
+            summary = str(getattr(setup, "summary", ""))
+
+        # Check deduplication & cooldown
+        cooldown_threshold = datetime.now(timezone.utc) - timedelta(minutes=cfg.cooldown_minutes)
+        dedup_stmt = (
+            select(Notification)
+            .where(
+                Notification.user_id == user_id,
+                Notification.created_at >= cooldown_threshold,
+            )
+            .order_by(desc(Notification.created_at))
+        )
+        recent_res = await self.db.execute(dedup_stmt)
+        recent_notifications = recent_res.scalars().all()
+
+        for notif in recent_notifications:
+            p = notif.payload or {}
+            if (
+                p.get("strategy") == "msnr"
+                and p.get("symbol") == sym
+                and p.get("timeframe") == timeframe
+                and p.get("action") == action
+            ):
+                logger.info(f"MSNR notification suppressed due to {cfg.cooldown_minutes}m cooldown for {sym}.")
+                return None
+
+        dev_stmt = select(Device).where(Device.user_id == user_id)
+        dev_res = await self.db.execute(dev_stmt)
+        devices = dev_res.scalars().all()
+
+        title = f"🎯 {action}: {sym} ({setup_type})"
+        body = (
+            f"Entry @ {entry:.2f} (50% CE) | SL: {sl:.2f} | "
+            f"TP1: {tp1:.2f} | TP2: {tp2:.2f} (1:{rr:.1f}R){smt_str}"
+        )
+
+        payload = {
+            "type": "TRADE_SETUP_ALERT",
+            "strategy": "msnr",
+            "symbol": sym,
+            "timeframe": timeframe,
+            "action": action,
+            "entry_price": str(entry),
+            "stop_loss": str(sl),
+            "tp1": str(tp1),
+            "tp2": str(tp2),
+            "rr_ratio": str(rr),
+            "phase": phase,
+            "summary": summary,
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        }
+
+        # Dispatch FCM
+        fb_app = _get_firebase_app()
+        sent_count = 0
+        if fb_app and devices:
+            android_config = messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    sound="default",
+                    priority="max",
+                    default_vibrate_timings=True,
+                    channel_id="forex_ai_alerts",
+                    icon="ic_stat_notification",
+                    color="#10B981",
+                ),
+            )
+            for dev in devices:
+                try:
+                    msg = messaging.Message(
+                        notification=messaging.Notification(
+                            title=title,
+                            body=body,
+                        ),
+                        data={k: str(v) for k, v in payload.items()},
+                        android=android_config,
+                        token=dev.fcm_token,
+                    )
+                    messaging.send(msg)
+                    sent_count += 1
+                    logger.info(f"FCM MSNR setup push delivered to {sym} on device token {dev.fcm_token[:12]}...")
+                except Exception as e:
+                    logger.warning(f"Failed to deliver FCM MSNR push: {e}")
+
+        status_val = "SENT" if (devices and sent_count > 0) else ("SENT_SIMULATED" if devices else "PENDING_NO_DEVICES")
+        now = datetime.now(timezone.utc)
+
+        record = Notification(
+            analysis_id=None,
+            user_id=user_id,
+            channel="fcm",
+            title=title,
+            body=body,
+            payload=payload,
+            sent_at=now if devices else None,
+            status=status_val,
+            created_at=now,
+        )
+        self.db.add(record)
+        await self.db.commit()
+        await self.db.refresh(record)
+        logger.info(f"Dispatched MSNR notification {record.id} for {sym} ({sent_count} live FCM delivered).")
+        return NotificationRead.model_validate(record)
+
     async def dispatch_trade_lifecycle_update(
         self,
         symbol: str,

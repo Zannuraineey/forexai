@@ -130,3 +130,39 @@ async def test_ut_bot_dispatch(
         user_id=1,
         rule_cfg=cfg,
     )
+
+
+@router.post("/notifications/test-msnr", response_model=Optional[NotificationRead])
+async def test_msnr_dispatch(
+    symbol: str = "XAUUSD",
+    timeframe: str = "15m",
+    direction: str = "BULLISH",
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Triggers an immediate test MSNR Key Level setup push notification to all registered FCM devices.
+    Includes 50% Consequent Encroachment (CE), Classic V zone, and SMT Divergence.
+    """
+    service = NotificationService(db)
+    test_setup = {
+        "direction": direction.upper(),
+        "setup_type": "DAILY_PROFILE_2_NY_REVERSAL",
+        "entry_price": 4106.21,
+        "stop_loss": 4098.50,
+        "target_1": 4125.00,
+        "target_2": 4180.00,
+        "risk_reward": 9.5,
+        "session_phase": "DISTRIBUTION_NY_AM",
+        "smt_confluence": {"divergence_type": "BULLISH_SMT", "correlated_symbol": "XAGUSD"},
+        "summary": "MSNR Classic V Support swept into 50% CE equilibrium @ 4106.21. Bullish SMT Divergence confirmed with XAGUSD Silver.",
+    }
+    cfg = NotificationService.DEFAULT_CONFIG.model_copy()
+    cfg.cooldown_minutes = 0
+    return await service.dispatch_msnr_setup_alert(
+        symbol=symbol.upper(),
+        setup=test_setup,
+        timeframe=timeframe,
+        user_id=1,
+        rule_cfg=cfg,
+    )
+
