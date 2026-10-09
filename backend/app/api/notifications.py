@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.services.notifications import NotificationService
+from app.services.notifications.notification_service import NotificationService
 from app.schemas.notification import (
     DeviceRegistrationRequest,
     DeviceRead,
