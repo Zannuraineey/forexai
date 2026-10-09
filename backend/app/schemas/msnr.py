@@ -2,7 +2,11 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
-from app.schemas.smt import SMTDivergenceDetail
+try:
+    from app.schemas.smt import SMTDivergenceDetail  # type: ignore
+except (ImportError, ModuleNotFoundError):
+    from .smt import SMTDivergenceDetail  # type: ignore
+
 
 
 class MSNRZoneType(str, Enum):
