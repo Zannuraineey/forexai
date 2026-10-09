@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 from app.schemas.target_realism import TargetClassification, TargetRealismMetrics
 
 class TargetRealismAnalyzer:
