@@ -384,3 +384,123 @@ async def test_11_xauusd_forensic_regression():
     assert "4100.81" in cond_map["Trade Geometry Valid (TP < Entry < SL)"].evidence
     assert "4124.33" in cond_map["Trade Geometry Valid (TP < Entry < SL)"].evidence
     assert "Trade geometry invalid" in result.summary
+
+
+@pytest.mark.asyncio
+async def test_session_profile_model_conditions():
+    """Verify London session sweeping Asia low with Bullish 7H bias produces MET for 7H bias, session range, sweep."""
+    provider = DeterministicAIProvider()
+
+    context = {
+        "symbol": "EURUSD",
+        "instrument_id": 1,
+        "timeframe": "15m",
+        "current_price": 1.0845,
+        "active_session": "london",
+        "seven_hour_profile": {
+            "status": "COMPLETED",
+            "direction": "BULLISH",
+            "classification": "EXPANSION",
+        },
+        "session_state": {
+            "session_levels": {
+                "asian": {
+                    "high": 1.0880,
+                    "low": 1.0820,
+                    "swept_low": True,
+                    "swept_high": False,
+                }
+            }
+        },
+        "market_structure": {
+            "recent_mss": [
+                {
+                    "mss_type": "BULLISH",
+                    "broken_swing_price": 1.0835,
+                    "shift_candle_ts": "2026-10-08T09:30:00Z",
+                }
+            ],
+            "active_unmitigated_fvgs": [
+                {
+                    "fvg_type": "BULLISH",
+                    "top_price": 1.0830,
+                    "bottom_price": 1.0825,
+                    "mitigated": False,
+                }
+            ],
+        },
+        "liquidity": {
+            "sweeps": [
+                {
+                    "sweep_type": "BULLISH",
+                    "swept_level_price": 1.0820,
+                    "sweep_depth_pips": 5.0,
+                    "rejection_wick_ratio": 0.40,
+                }
+            ]
+        },
+    }
+
+    result = await provider.analyze(context, "London 3-step setup")
+
+    cond_map = {c.condition: c for c in result.condition_breakdown}
+    assert "7H bias" in cond_map
+    assert cond_map["7H bias"].satisfied is True
+    assert "Prior session range available" in cond_map
+    assert cond_map["Prior session range available"].satisfied is True
+    assert "Sweep in active session" in cond_map
+    assert cond_map["Sweep in active session"].satisfied is True
+
+
+@pytest.mark.asyncio
+async def test_session_proximity_potential_setup():
+    """Verify price approaching Asian low in London returns POTENTIAL_SETUP before sweep has occurred."""
+    provider = DeterministicAIProvider()
+
+    context = {
+        "symbol": "EURUSD",
+        "instrument_id": 1,
+        "timeframe": "15m",
+        "current_price": 1.0825, # Asian low is 1.0820, distance = 5 pips (< 10 pips threshold)
+        "active_session": "london",
+        "seven_hour_profile": {
+            "status": "COMPLETED",
+            "direction": "BULLISH",
+        },
+        "session_state": {
+            "session_levels": {
+                "asian": {
+                    "high": 1.0880,
+                    "low": 1.0820,
+                    "swept_low": False, # Not yet swept
+                    "swept_high": False,
+                }
+            }
+        },
+        "market_structure": {},
+        "liquidity": {"sweeps": []},
+    }
+
+    result = await provider.analyze(context, "London 3-step setup")
+    assert result.state == AnalysisStateEnum.POTENTIAL_SETUP
+    assert "approaching" in result.summary.lower()
+
+
+
+def test_scanner_state_counts_in_status():
+    """Verify scanner get_status() includes state_counts dictionary with required state keys."""
+    from app.services.ai.session_scanner import SessionScannerWorker
+    worker = SessionScannerWorker()
+    worker._last_state_counts = {
+        "NO_SETUP": 5,
+        "WATCH": 2,
+        "POTENTIAL": 1,
+        "VALID": 1,
+    }
+    status = worker.get_status()
+    assert "state_counts" in status
+    assert status["state_counts"]["NO_SETUP"] == 5
+    assert status["state_counts"]["WATCH"] == 2
+    assert status["state_counts"]["POTENTIAL"] == 1
+    assert status["state_counts"]["VALID"] == 1
+

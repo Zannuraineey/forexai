@@ -11,6 +11,7 @@ import '../models/candle_model.dart';
 import '../models/market_item.dart';
 import '../models/market_context_model.dart';
 import '../models/news_intelligence.dart';
+import '../models/macro_ai_config.dart';
 
 class _CacheEntry {
   final dynamic data;
@@ -298,6 +299,33 @@ class ApiService {
       return jsonDecode(response.body) as Map<String, dynamic>;
     }
     throw Exception('Failed to fetch UT Bot analysis: ${response.statusCode}');
+  }
+
+  // 3b. MSNR & Alchemist Playbook APIs
+  static Future<Map<String, dynamic>> getMsnrAnalysis(
+    String symbol, {
+    String timeframe = '15m',
+    int limit = 60,
+  }) async {
+    final url = '/api/v1/msnr/analysis?symbol=$symbol&timeframe=$timeframe&limit=$limit';
+    final response = await _get(url);
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to fetch MSNR analysis: ${response.statusCode}');
+  }
+
+  static Future<List<dynamic>> getMsnrZones(
+    String symbol, {
+    String timeframe = '15m',
+    int limit = 60,
+  }) async {
+    final url = '/api/v1/msnr/zones?symbol=$symbol&timeframe=$timeframe&limit=$limit';
+    final response = await _get(url);
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch MSNR zones: ${response.statusCode}');
   }
 
   static Future<List<AIAnalysisRecord>> getAnalysisHistory({
@@ -628,5 +656,126 @@ class ApiService {
       return AIQueryResponseModel.fromJson(jsonDecode(response.body));
     }
     throw Exception('Failed to query AI macro analyst: ${response.statusCode}');
+  }
+
+  // -------------------------------------------------------------
+  // AI Macro Reasoning Provider Configuration (Settings)
+  // -------------------------------------------------------------
+  static Future<List<SupportedProvider>> getMacroAiProviders() async {
+    final response = await _get('/api/v1/macro-ai/providers');
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      return list.map((e) => SupportedProvider.fromJson(e as Map<String, dynamic>)).toList();
+    }
+    throw Exception('Failed to fetch AI providers: ${response.statusCode}');
+  }
+
+  static String userToken = 'user_default';
+
+  static Future<MacroAiConfigSafe> getMacroAiConfig() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/v1/macro-ai/config'),
+      headers: {
+        'Authorization': 'Bearer $userToken',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      return MacroAiConfigSafe.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to fetch AI configuration: ${response.statusCode}');
+  }
+
+  static Future<MacroAiConfigSafe> saveMacroAiConfig({
+    required String provider,
+    required String model,
+    required bool isEnabled,
+    String? apiKey,
+    String? apiBaseUrl,
+  }) async {
+    final body = <String, dynamic>{
+      'provider': provider,
+      'model': model,
+      'is_enabled': isEnabled,
+    };
+    if (apiKey != null && apiKey.isNotEmpty) {
+      body['api_key'] = apiKey;
+    }
+    if (apiBaseUrl != null && apiBaseUrl.isNotEmpty) {
+      body['api_base_url'] = apiBaseUrl;
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/v1/macro-ai/config'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $userToken',
+      },
+      body: jsonEncode(body),
+    );
+    if (response.statusCode == 200) {
+      return MacroAiConfigSafe.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to save AI configuration: ${response.statusCode}');
+  }
+
+  static Future<MacroAiTestResult> testMacroAiConnection({
+    String? provider,
+    String? model,
+    String? apiKey,
+    String? apiBaseUrl,
+  }) async {
+    final body = <String, dynamic>{};
+    if (provider != null) body['provider'] = provider;
+    if (model != null) body['model'] = model;
+    if (apiKey != null && apiKey.isNotEmpty) body['api_key'] = apiKey;
+    if (apiBaseUrl != null && apiBaseUrl.isNotEmpty) body['api_base_url'] = apiBaseUrl;
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/v1/macro-ai/test'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $userToken',
+      },
+      body: jsonEncode(body),
+    );
+    if (response.statusCode == 200) {
+      return MacroAiTestResult.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to test AI provider connection: ${response.statusCode}');
+  }
+
+  static Future<void> removeMacroAiCredentials() async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/v1/macro-ai/credentials'),
+      headers: {
+        'Authorization': 'Bearer $userToken',
+      },
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to remove AI credentials: ${response.statusCode}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getSmtDivergence(String symbol, {String timeframe = '15m'}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/v1/smt/divergence?symbol=$symbol&timeframe=$timeframe'),
+      headers: {'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to fetch SMT divergence: ${response.statusCode}');
+  }
+
+  static Future<List<dynamic>> getSmtMatrix({String timeframe = '15m'}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/v1/smt/matrix?timeframe=$timeframe'),
+      headers: {'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as List<dynamic>;
+    }
+    throw Exception('Failed to fetch SMT matrix: ${response.statusCode}');
   }
 }

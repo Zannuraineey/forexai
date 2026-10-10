@@ -95,74 +95,70 @@ def test_3_7h_conflict():
 
 
 # ==============================================================================
-# 4. DXY SUPPORTIVE
+# 4. DXY REMOVED FROM TRADING LOGIC (ALWAYS NEUTRAL)
 # ==============================================================================
 def test_4_dxy_supportive():
     """
-    Test 4: DXY Intermarket confirmation:
-    - EURUSD (USD quote): Bullish bias + DXY Bearish -> SUPPORTIVE
-    - USDJPY (USD base): Bullish bias + DXY Bullish -> SUPPORTIVE
+    Test 4: DXY has been removed from trade setup generation.
+    evaluate_dxy_relationship always returns DXYRelationship.NEUTRAL.
     """
     eur_dxy = BiasValidationEngine.evaluate_dxy_relationship(
         symbol="EURUSD",
         proposed_bias="BULLISH",
         dxy_data={"direction": "BEARISH", "trend_strength": 0.8},
     )
-    assert eur_dxy["relationship"] == DXYRelationship.SUPPORTIVE
+    assert eur_dxy["relationship"] == DXYRelationship.NEUTRAL
 
     jpy_dxy = BiasValidationEngine.evaluate_dxy_relationship(
         symbol="USDJPY",
         proposed_bias="BULLISH",
         dxy_data={"direction": "BULLISH", "trend_strength": 0.85},
     )
-    assert jpy_dxy["relationship"] == DXYRelationship.SUPPORTIVE
+    assert jpy_dxy["relationship"] == DXYRelationship.NEUTRAL
 
 
 # ==============================================================================
-# 5. DXY CONTRADICTORY
+# 5. DXY CONTRADICTORY REMOVED
 # ==============================================================================
 def test_5_dxy_contradictory():
     """
-    Test 5: DXY Intermarket contradiction:
-    - EURUSD (USD quote): Bullish bias + DXY Bullish -> CONTRADICTING
-    - USDJPY (USD base): Bullish bias + DXY Bearish -> CONTRADICTING
+    Test 5: DXY does not gate trade direction. Always returns NEUTRAL.
     """
     eur_dxy = BiasValidationEngine.evaluate_dxy_relationship(
         symbol="EURUSD",
         proposed_bias="BULLISH",
         dxy_data={"direction": "BULLISH", "trend_strength": 0.9},
     )
-    assert eur_dxy["relationship"] == DXYRelationship.CONTRADICTING
+    assert eur_dxy["relationship"] == DXYRelationship.NEUTRAL
 
     jpy_dxy = BiasValidationEngine.evaluate_dxy_relationship(
         symbol="USDJPY",
         proposed_bias="BULLISH",
         dxy_data={"direction": "BEARISH", "trend_strength": 0.75},
     )
-    assert jpy_dxy["relationship"] == DXYRelationship.CONTRADICTING
+    assert jpy_dxy["relationship"] == DXYRelationship.NEUTRAL
 
 
 # ==============================================================================
-# 6. DXY UNAVAILABLE
+# 6. DXY UNAVAILABLE / MISSING
 # ==============================================================================
 def test_6_dxy_unavailable():
     """
-    Test 6: For cross pairs without USD (e.g. EURGBP) or when DXY data is missing,
-    do NOT manufacture a signal. Must report UNAVAILABLE.
+    Test 6: For cross pairs or missing DXY data, evaluate_dxy_relationship returns NEUTRAL.
     """
     cross_dxy = BiasValidationEngine.evaluate_dxy_relationship(
         symbol="EURGBP",
         proposed_bias="BULLISH",
         dxy_data={"direction": "BULLISH"},
     )
-    assert cross_dxy["relationship"] == DXYRelationship.UNAVAILABLE
+    assert cross_dxy["relationship"] == DXYRelationship.NEUTRAL
 
     none_dxy = BiasValidationEngine.evaluate_dxy_relationship(
         symbol="EURUSD",
         proposed_bias="BULLISH",
         dxy_data=None,
     )
-    assert none_dxy["relationship"] == DXYRelationship.UNAVAILABLE
+    assert none_dxy["relationship"] in (DXYRelationship.NEUTRAL, DXYRelationship.UNAVAILABLE)
 
 
 # ==============================================================================
@@ -340,7 +336,7 @@ def test_14_conflict_state():
 
     assert res.final_bias == FinalBiasState.CONFLICTED
     assert res.bias_quality == BiasQuality.UNUSABLE
-    assert len(res.conflicts) >= 3
+    assert len(res.conflicts) >= 2
 
 
 # ==============================================================================
@@ -367,13 +363,12 @@ def test_15_xagusd_forensic_context():
     assert res.symbol == "XAGUSD"
     assert res.seven_hour_bias["direction"] == "BEARISH"
     assert res.seven_hour_bias["role_to_htf"] == SevenHourRelationship.CONTRADICT
-    assert res.dxy_context["relationship"] == DXYRelationship.CONTRADICTING
+    assert res.dxy_context["relationship"] == DXYRelationship.NEUTRAL
     assert res.liquidity_event["ssl_swept"] is True
     assert res.mss_state["has_bullish_mss"] is True
     assert res.session_context["primary_session"] == "New York"
-    # The setup had significant contradictory intermarket flow
+    # The setup had significant contradictory 7H flow
     assert any("7H Profile (BEARISH) contradicts HTF bias" in c for c in res.conflicts)
-    assert any("DXY intermarket flow" in c for c in res.conflicts)
 
 
 # ==============================================================================
@@ -388,7 +383,7 @@ def test_16_xauusd_context():
         proposed_bias="BULLISH",
         dxy_data={"direction": "BEARISH", "trend_strength": 0.8},
     )
-    assert dxy_res["relationship"] == DXYRelationship.SUPPORTIVE
+    assert dxy_res["relationship"] == DXYRelationship.NEUTRAL
 
     res = BiasValidationEngine.validate_bias(
         symbol="XAUUSD",
@@ -397,7 +392,8 @@ def test_16_xauusd_context():
         dxy_data={"direction": "BEARISH", "trend_strength": 0.8},
     )
     assert res.final_bias == FinalBiasState.BULLISH
-    assert res.dxy_context["relationship"] == DXYRelationship.SUPPORTIVE
+    assert res.dxy_context["relationship"] == DXYRelationship.NEUTRAL
+
 
 
 # ==============================================================================

@@ -119,18 +119,7 @@ class _NewsScreenState extends State<NewsScreen> {
 
     try {
       final futures = await Future.wait([
-        ApiService.getDxyMetrics().catchError((_) => DXYMetricsModel(
-          value: 103.45,
-          changePct: 0.24,
-          trend: 'BULLISH',
-          marketRegime: 'ACCUMULATION',
-          smcStructure: 'Bullish order flow; testing 4H supply block.',
-          rsi14: 54.2,
-          ema200: 102.80,
-          displacementActive: false,
-          confirmationStatus: 'NEUTRAL',
-          source: 'SYNTHETIC_BASKET_DXY',
-        )),
+        ApiService.getDxyMetrics().then<DXYMetricsModel?>((val) => val).catchError((_) => null),
         ApiService.getEconomicEvents(
           currency: _selectedCurrencyFilter == 'ALL' ? null : _selectedCurrencyFilter,
           impact: _selectedImpactFilter == 'ALL' ? null : _selectedImpactFilter,
@@ -368,9 +357,8 @@ class _NewsScreenState extends State<NewsScreen> {
                   _buildScenarioBar(),
                   const SizedBox(height: 10),
 
-                  // 2. DXY Dollar Benchmark Card
-                  if (_dxyMetrics != null) _buildDxyTerminalCard(_dxyMetrics!),
-                  const SizedBox(height: 10),
+                  // 2. DXY Dollar Benchmark Card (Hidden - DXY is evaluated only inside specific event/news analyses)
+                  // if (_dxyMetrics != null) _buildDxyTerminalCard(_dxyMetrics!),
 
                   // 3. Tab Stream Selector (Calendar vs News Wire)
                   _buildStreamSelectorTabs(),

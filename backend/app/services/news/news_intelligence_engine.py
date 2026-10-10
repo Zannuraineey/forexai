@@ -59,7 +59,20 @@ class NewsIntelligenceEngine:
             event = all_events[0] if all_events else self.calendar_service._svc._generate_dynamic_live_schedule()[0]
 
         # 2. Compute Live Real-time DXY Metrics & SMC Trajectory from live price feeds
-        dxy = await self.dxy_service.calculate_dxy_index(allow_synthetic_fallback=True)
+        dxy = await self.dxy_service.calculate_dxy_index(allow_synthetic_fallback=False)
+        if dxy is None:
+            dxy = DXYMetrics(
+                value=0.0,
+                change_pct=0.0,
+                trend="UNAVAILABLE",
+                market_regime="UNAVAILABLE",
+                smc_structure="UNAVAILABLE (No live DXY feed)",
+                rsi_14=50.0,
+                ema_200=0.0,
+                displacement_active=False,
+                confirmation_status="UNAVAILABLE",
+                source="UNAVAILABLE",
+            )
 
         # 3. Pull live pair pricing & technical levels for requested pairs
         pair_data = await self._fetch_pairs_live_data(req.user_pairs, dxy)
@@ -86,16 +99,20 @@ class NewsIntelligenceEngine:
         # 6. Fallback / Native Quantitative Institutional Macro Engine
         dev_summary = self._analyze_deviation(event)
         hist_comp = self._compare_historical(event, dxy)
-        macro_regime = (
-            f"Current Macro Regime: {dxy.market_regime}. DXY Index trading at {dxy.value:.2f} ({dxy.change_pct:+.2f}%). "
-            f"The Dollar is displaying {dxy.trend.lower()} order flow with RSI at {dxy.rsi_14:.1f} and EMA200 at {dxy.ema_200:.2f}. "
-            f"Institutional order flow skews toward {'safe-haven USD accumulation' if dxy.trend == 'BULLISH' else 'pro-cyclical risk asset expansion'}."
-        )
-        smc_synthesis = (
-            f"SMC Dollar Confluence: {dxy.smc_structure} "
-            f"Confirmation Status: {dxy.confirmation_status.replace('_', ' ')}. "
-            f"Order flow indicates that smart money is {'accumulating institutional dollar longs' if dxy.trend == 'BULLISH' else 'distributing dollar premium into foreign currencies'}."
-        )
+        if dxy.trend == "UNAVAILABLE":
+            macro_regime = "Current Macro Regime: UNAVAILABLE. DXY market data feed is missing from database."
+            smc_synthesis = "SMC Dollar Confluence: UNAVAILABLE. Smart money macro trajectory awaiting live DXY pricing."
+        else:
+            macro_regime = (
+                f"Current Macro Regime: {dxy.market_regime}. DXY Index trading at {dxy.value:.2f} ({dxy.change_pct:+.2f}%). "
+                f"The Dollar is displaying {dxy.trend.lower()} order flow with RSI at {dxy.rsi_14:.1f} and EMA200 at {dxy.ema_200:.2f}. "
+                f"Institutional order flow skews toward {'safe-haven USD accumulation' if dxy.trend == 'BULLISH' else 'pro-cyclical risk asset expansion'}."
+            )
+            smc_synthesis = (
+                f"SMC Dollar Confluence: {dxy.smc_structure} "
+                f"Confirmation Status: {dxy.confirmation_status.replace('_', ' ')}. "
+                f"Order flow indicates that smart money is {'accumulating institutional dollar longs' if dxy.trend == 'BULLISH' else 'distributing dollar premium into foreign currencies'}."
+            )
         pair_analyses = self._synthesize_pair_analyses(pair_data, event, dxy)
         conclusion = self._build_actionable_conclusion(event, dxy, pair_analyses, req.custom_notes or req.custom_query)
 
@@ -133,7 +150,20 @@ class NewsIntelligenceEngine:
     # INTERACTIVE CONVERSATIONAL QUERY ("Ask AI Macro Analyst")
     # -------------------------------------------------------------
     async def answer_ai_query(self, req: AIQueryRequest) -> AIQueryResponse:
-        dxy = await self.dxy_service.calculate_dxy_index(allow_synthetic_fallback=True)
+        dxy = await self.dxy_service.calculate_dxy_index(allow_synthetic_fallback=False)
+        if dxy is None:
+            dxy = DXYMetrics(
+                value=0.0,
+                change_pct=0.0,
+                trend="UNAVAILABLE",
+                market_regime="UNAVAILABLE",
+                smc_structure="UNAVAILABLE (No live DXY feed)",
+                rsi_14=50.0,
+                ema_200=0.0,
+                displacement_active=False,
+                confirmation_status="UNAVAILABLE",
+                source="UNAVAILABLE",
+            )
         pair_data = await self._fetch_pairs_live_data(req.user_pairs, dxy)
         events = self.calendar_service.get_all_events()
 

@@ -184,12 +184,31 @@ class SessionEngine:
         for name, window in windows.items():
             lvl = SessionLevels(session_name=name, status=window.status)
             if candles_today:
+                def _to_utc(c_ts: datetime) -> datetime:
+                    return c_ts.astimezone(timezone.utc) if c_ts.tzinfo else c_ts.replace(tzinfo=timezone.utc)
+
                 # Filter candles that fell within [start_utc, end_utc]
                 # If window is ACTIVE, candles up to current dt_utc
                 session_candles = [
                     c for c in candles_today
-                    if window.start_utc <= (c.timestamp_utc.astimezone(timezone.utc) if c.timestamp_utc.tzinfo else c.timestamp_utc.replace(tzinfo=timezone.utc)) < window.end_utc
+                    if window.start_utc <= _to_utc(c.timestamp_utc) < window.end_utc
+                    and _to_utc(c.timestamp_utc) <= dt_utc
                 ]
+
+                # If no candles found in today's window, check if the session window started yesterday
+                # (e.g. Asian session before today's open, or completed session from previous UTC day)
+                if not session_candles:
+                    prev_window = cls.get_session_window(name, current_date - timedelta(days=1), dt_utc)
+                    prev_candles = [
+                        c for c in candles_today
+                        if prev_window.start_utc <= _to_utc(c.timestamp_utc) < prev_window.end_utc
+                        and _to_utc(c.timestamp_utc) <= dt_utc
+                    ]
+                    if prev_candles:
+                        session_candles = prev_candles
+                        if lvl.status == "UPCOMING":
+                            lvl.status = "COMPLETED"
+
                 if session_candles:
                     lvl.candle_count = len(session_candles)
                     lvl.open = session_candles[0].open

@@ -45,7 +45,8 @@ async def test_news_intelligence_synthesis(db_session):
     
     assert report.id.startswith("rep_")
     assert report.event.title
-    assert report.dxy_context.value > 0
+    assert report.dxy_context.value >= 0
+
     assert report.deviation_analysis
     assert report.historical_comparison
     assert report.macro_regime_summary

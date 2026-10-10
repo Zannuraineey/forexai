@@ -55,62 +55,14 @@ class BiasValidationEngine:
         dxy_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Evaluates DXY intermarket alignment against a symbol's proposed bias.
+        DXY has been removed from trade setup generation and bias validation.
+        Always returns DXYRelationship.NEUTRAL so trading setups are never gated by DXY.
         """
-        if not dxy_data or dxy_data.get("dxy_direction") == "UNAVAILABLE" or str(dxy_data.get("direction") or dxy_data.get("trend") or "").upper() == "UNAVAILABLE":
-            return {
-                "dxy_direction": "UNAVAILABLE",
-                "dxy_trend_strength": None,
-                "dxy_change": None,
-                "relationship": DXYRelationship.UNAVAILABLE,
-            }
+        dxy_dir = "UNAVAILABLE" if not dxy_data else str(dxy_data.get("direction") or dxy_data.get("trend") or dxy_data.get("dxy_direction") or "NEUTRAL").upper()
+        strength = None if not dxy_data else (dxy_data.get("trend_strength") or dxy_data.get("dxy_trend_strength"))
+        change = None if not dxy_data else (dxy_data.get("change") or dxy_data.get("change_pct") or dxy_data.get("dxy_change"))
 
-        sym_upper = symbol.upper()
-        dxy_dir = str(dxy_data.get("direction") or dxy_data.get("trend") or dxy_data.get("dxy_direction") or "NEUTRAL").upper()
-        strength = dxy_data.get("trend_strength") or dxy_data.get("dxy_trend_strength")
-        change = dxy_data.get("change") or dxy_data.get("change_pct") or dxy_data.get("dxy_change")
-
-        is_usd_quote = sym_upper in cls.USD_QUOTE_INSTRUMENTS
-        is_usd_base = sym_upper in cls.USD_BASE_INSTRUMENTS
-
-        if not (is_usd_quote or is_usd_base):
-            return {
-                "dxy_direction": dxy_dir,
-                "dxy_trend_strength": strength,
-                "dxy_change": change,
-                "relationship": DXYRelationship.UNAVAILABLE,
-            }
-
-        if dxy_dir == "NEUTRAL" or proposed_bias in ("NEUTRAL", "CONFLICTED", "INSUFFICIENT_DATA"):
-            return {
-                "dxy_direction": dxy_dir,
-                "dxy_trend_strength": strength,
-                "dxy_change": change,
-                "relationship": DXYRelationship.NEUTRAL,
-            }
-
-        is_bullish = proposed_bias == "BULLISH"
-
-        if is_usd_quote:
-            # DXY Bullish = USD strong = quote drops (Bearish quote)
-            # DXY Bearish = USD weak = quote rises (Bullish quote)
-            if dxy_dir == "BULLISH":
-                rel = DXYRelationship.CONTRADICTING if is_bullish else DXYRelationship.SUPPORTIVE
-            elif dxy_dir == "BEARISH":
-                rel = DXYRelationship.SUPPORTIVE if is_bullish else DXYRelationship.CONTRADICTING
-            else:
-                rel = DXYRelationship.NEUTRAL
-        elif is_usd_base:
-            # DXY Bullish = USD strong = base pair rises (Bullish base)
-            # DXY Bearish = USD weak = base pair drops (Bearish base)
-            if dxy_dir == "BULLISH":
-                rel = DXYRelationship.SUPPORTIVE if is_bullish else DXYRelationship.CONTRADICTING
-            elif dxy_dir == "BEARISH":
-                rel = DXYRelationship.CONTRADICTING if is_bullish else DXYRelationship.SUPPORTIVE
-            else:
-                rel = DXYRelationship.NEUTRAL
-        else:
-            rel = DXYRelationship.UNAVAILABLE
+        rel = DXYRelationship.UNAVAILABLE if (not dxy_data or dxy_dir == "UNAVAILABLE") else DXYRelationship.NEUTRAL
 
         return {
             "dxy_direction": dxy_dir,
@@ -118,6 +70,7 @@ class BiasValidationEngine:
             "dxy_change": change,
             "relationship": rel,
         }
+
 
     @classmethod
     def evaluate_news_context(
@@ -434,8 +387,8 @@ class BiasValidationEngine:
             dxy_data=eff_dxy,
         )
 
-        if dxy_payload["relationship"] == DXYRelationship.CONTRADICTING:
-            conflicts.append(f"DXY intermarket flow ({dxy_payload['dxy_direction']}) contradicts proposed {prelim_bias} bias")
+        # DXY intermarket flow is excluded from gating setups/bias
+        # (DXY is only evaluated during macro events/news analysis)
 
         # -------------------------------------------------------------
         # 8. News / Macro Context
@@ -481,7 +434,7 @@ class BiasValidationEngine:
             status = "NEUTRAL"
 
         # Check for fatal conflicts:
-        # e.g., 4H vs 1H inverted, or HTF Bullish but 7H Bearish + 15M Bearish + DXY Contradicting
+        # e.g., 4H vs 1H inverted, or HTF Bullish but 7H Bearish + 15M Bearish
         elif htf_bias_dir == "CONFLICTED":
             final_bias = FinalBiasState.CONFLICTED
             bias_quality = BiasQuality.UNUSABLE
@@ -492,22 +445,20 @@ class BiasValidationEngine:
             htf_bias_dir == "BULLISH"
             and p_dir == "BEARISH"
             and trend_15m == "BEARISH"
-            and dxy_payload["relationship"] == DXYRelationship.CONTRADICTING
         ):
             final_bias = FinalBiasState.CONFLICTED
             bias_quality = BiasQuality.UNUSABLE
-            explanation = "HTF Bullish bias is severely contradicted by Bearish 7H Profile, Bearish 15M structure, and Contradictory DXY flow."
+            explanation = "HTF Bullish bias is severely contradicted by Bearish 7H Profile and Bearish 15M structure."
             status = "CONFLICTED"
 
         elif (
             htf_bias_dir == "BEARISH"
             and p_dir == "BULLISH"
             and trend_15m == "BULLISH"
-            and dxy_payload["relationship"] == DXYRelationship.CONTRADICTING
         ):
             final_bias = FinalBiasState.CONFLICTED
             bias_quality = BiasQuality.UNUSABLE
-            explanation = "HTF Bearish bias is severely contradicted by Bullish 7H Profile, Bullish 15M structure, and Contradictory DXY flow."
+            explanation = "HTF Bearish bias is severely contradicted by Bullish 7H Profile and Bullish 15M structure."
             status = "CONFLICTED"
 
         elif htf_bias_dir == "BULLISH":
@@ -516,14 +467,13 @@ class BiasValidationEngine:
             if (
                 p_role == SevenHourRelationship.SUPPORT
                 and trend_15m in ("BULLISH", "UNDEFINED")
-                and dxy_payload["relationship"] in (DXYRelationship.SUPPORTIVE, DXYRelationship.NEUTRAL, DXYRelationship.UNAVAILABLE)
                 and news_payload["risk_level"] in (NewsRiskLevel.LOW_RISK, NewsRiskLevel.MEDIUM_RISK, NewsRiskLevel.UNAVAILABLE)
             ):
                 bias_quality = BiasQuality.HIGH
                 explanation = "Full structural alignment: HTF Bullish, 7H supportive, and supportive/neutral macro backdrop."
-            elif p_role == SevenHourRelationship.CONTRADICT or dxy_payload["relationship"] == DXYRelationship.CONTRADICTING:
+            elif p_role == SevenHourRelationship.CONTRADICT:
                 bias_quality = BiasQuality.LOW
-                explanation = "HTF structure is Bullish, but restrained by contradictory 7H or DXY intermarket flow."
+                explanation = "HTF structure is Bullish, but restrained by contradictory 7H flow."
             else:
                 bias_quality = BiasQuality.MODERATE
                 explanation = "HTF structure is Bullish with moderate context alignment."
@@ -534,14 +484,13 @@ class BiasValidationEngine:
             if (
                 p_role == SevenHourRelationship.SUPPORT
                 and trend_15m in ("BEARISH", "UNDEFINED")
-                and dxy_payload["relationship"] in (DXYRelationship.SUPPORTIVE, DXYRelationship.NEUTRAL, DXYRelationship.UNAVAILABLE)
                 and news_payload["risk_level"] in (NewsRiskLevel.LOW_RISK, NewsRiskLevel.MEDIUM_RISK, NewsRiskLevel.UNAVAILABLE)
             ):
                 bias_quality = BiasQuality.HIGH
                 explanation = "Full structural alignment: HTF Bearish, 7H supportive, and supportive/neutral macro backdrop."
-            elif p_role == SevenHourRelationship.CONTRADICT or dxy_payload["relationship"] == DXYRelationship.CONTRADICTING:
+            elif p_role == SevenHourRelationship.CONTRADICT:
                 bias_quality = BiasQuality.LOW
-                explanation = "HTF structure is Bearish, but restrained by contradictory 7H or DXY intermarket flow."
+                explanation = "HTF structure is Bearish, but restrained by contradictory 7H flow."
             else:
                 bias_quality = BiasQuality.MODERATE
                 explanation = "HTF structure is Bearish with moderate context alignment."

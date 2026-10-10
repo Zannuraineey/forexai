@@ -45,12 +45,23 @@ async def get_watchlist_summary(
         candles = await svc.get_candles(symbol=inst.symbol, timeframe="1m", limit=2, auto_fetch=False)
         if not candles:
             candles = await svc.get_candles(symbol=inst.symbol, timeframe="15m", limit=2, auto_fetch=False)
-        # If still no candles (e.g. freshly activated instrument), fetch on-demand to seed DB
-        if not candles:
+
+        is_stale = False
+        if candles:
+            c_ts = candles[-1].timestamp_utc
+            if c_ts.tzinfo is None:
+                c_ts = c_ts.replace(tzinfo=timezone.utc)
+            is_synth = any(k in inst.symbol.upper() for k in ["BOOM", "CRASH", "R_", "1HZ", "RB", "WLD", "JD", "STP", "DEX"])
+            if (is_synth or not is_weekend) and (now_utc - c_ts).total_seconds() > 300:
+                is_stale = True
+
+        # If missing or stale, fetch on-demand to provide live market prices
+        if not candles or is_stale:
             try:
                 candles = await svc.get_candles(symbol=inst.symbol, timeframe="1m", limit=2, auto_fetch=True)
             except Exception:
                 pass
+
 
         price = None
         change_pct = 0.0

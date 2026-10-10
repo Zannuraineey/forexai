@@ -8,11 +8,15 @@ An institutional-grade, full-stack **Forex & Synthetic Indices AI Market Analysi
 1. [Architecture Overview](#-architecture-overview)
 2. [Core Engines & Strategy Features](#-core-engines--strategy-features)
    - [Smart Money Concepts (SMC) & ICT Engine](#1-smart-money-concepts-smc--ict-engine)
-   - [Non-Repainting UT Bot Engine](#2-non-repainting-ut-bot-engine)
-   - [Structured Actionable Trade Tickets & 3-Tier Scaling](#3-structured-actionable-trade-tickets--3-tier-scaling)
-   - [Trade Lifecycle Tracker & Milestones](#4-trade-lifecycle-tracker--milestones)
-   - [Macro News Intelligence & DXY Engine](#5-macro-news-intelligence--dxy-engine)
-   - [High-Priority Push Alerts (FCM)](#6-high-priority-push-alerts-fcm)
+   - [MSNR Institutional Execution Model & Consequent Encroachment](#2-msnr-institutional-execution-model--consequent-encroachment)
+   - [Smart Money Technique (SMT) Divergence Engine](#3-smart-money-technique-smt-divergence-engine)
+   - [7-Hour Profile Engine & Session Persistence](#4-7-hour-profile-engine--session-persistence)
+   - [Non-Repainting UT Bot Engine](#5-non-repainting-ut-bot-engine)
+   - [Structured Actionable Trade Tickets & 3-Tier Scaling](#6-structured-actionable-trade-tickets--3-tier-scaling)
+   - [Trade Lifecycle Tracker & Milestones](#7-trade-lifecycle-tracker--milestones)
+   - [Macro News Intelligence & DXY Decoupling](#8-macro-news-intelligence--dxy-decoupling)
+   - [Session Scanner Diagnostics & High-Priority Push Alerts (FCM)](#9-session-scanner-diagnostics--high-priority-push-alerts-fcm)
+
 3. [Repository Structure](#-repository-structure)
 4. [Prerequisites & Toolchain](#-prerequisites--toolchain)
 5. [Step-by-Step Setup Guide](#-step-by-step-setup-guide)
@@ -106,7 +110,44 @@ An institutional-grade, full-stack **Forex & Synthetic Indices AI Market Analysi
 - **Market Structure Shift (MSS)**: Validates character change (CHoCH) on closed candles.
 - **Fair Value Gaps (FVG) & Order Blocks (OB)**: High-probability entry zones matching directional flow.
 
-### 2. Non-Repainting UT Bot Engine
+### 2. MSNR Institutional Execution Model & Consequent Encroachment
+- **5-Step Institutional Setup Sequence**:
+  1. **7H Profile Dominance**: Trade direction must be strictly aligned with the latest Completed 7-Hour Profile (`BULLISH` or `BEARISH`).
+  2. **Session Liquidity Manipulation**: Wick sweep of opposing previous session pool (Asia High/Low or London High/Low) inside active killzone.
+  3. **MSNR Classic Exhaustion Bar**: Requires manipulation candle wick ratio $\ge 35\%$ (`rejection_wick_ratio >= 0.35`) to confirm institutional absorption and filter out aggressive breakout spikes.
+  4. **Displacement & Market Structure Shift (MSS)**: Clear lower-timeframe body close breaking the structural swing high/low.
+  5. **50% Consequent Encroachment (CE) Retest Entry**: Limit entry placed precisely at the 50% midpoint of the displacement Fair Value Gap (FVG) or RBS/SBR flip zone:
+     $$\text{Entry Price} = \frac{\text{FVG Top} + \text{FVG Bottom}}{2}$$
+- **Strict Mathematical Geometry Validation (`validate_trade_geometry`)**:
+  - **BUY**: $\text{Stop Loss} < \text{Entry (CE)} < \text{Take Profit}$
+  - **SELL**: $\text{Take Profit} < \text{Entry (CE)} < \text{Stop Loss}$
+  - Inverted targets or zero-risk trades are strictly rejected and downgraded to diagnostic `POTENTIAL_SETUP`.
+  - Minimum Risk-to-Reward ratio: $\text{R:R} \ge 2.0$.
+  - Dynamic Stop Loss buffer calculated via ATR (minimum $1.50 / 15$ pips on Gold `XAUUSD`).
+
+### 3. Smart Money Technique (SMT) Divergence Engine
+- **Intermarket Divergence Pairs**:
+  - **Precious Metals**: `XAUUSD` (Gold) $\longleftrightarrow$ `XAGUSD` (Silver)
+  - **Forex Majors**: `EURUSD` (Fiber) $\longleftrightarrow$ `GBPUSD` (Cable)
+- **Accumulation / Distribution Confirmation**:
+  - **Bullish SMT**: Asset A takes session low (Lower Low) while Asset B holds above session low (Higher Low) $\rightarrow$ Elevates setup quality to **`Grade A+`**.
+  - **Bearish SMT**: Asset A sweeps session high (Higher High) while Asset B fails to sweep (Lower High) $\rightarrow$ Elevates setup quality to **`Grade A+`**.
+- **Contradiction Veto**:
+  - If structural shift is Long but an active SMT divergence is Bearish, the bias engine automatically flags a conflict and suppresses the setup.
+
+### 4. 7-Hour Profile Engine & Session Persistence
+- **Anchor Configurations & Stub Handling**:
+  - 4 daily profile blocks evaluated in UTC (`DAILY_ANCHOR` mode): `00:00–07:00`, `07:00–14:00`, `14:00–21:00`, and `21:00–24:00` (3-hour stub).
+  - Stub expected count scales dynamically to 3 candles, ensuring proper `COMPLETED` resolution.
+- **85% Completeness Ratio**:
+  - Configured with `min_candles_ratio_for_complete = 0.85` so that 1 missing 1H candle (6 out of 7 = 85.7%) safely achieves `ProfileStatus.COMPLETED` and `DataQuality.COMPLETE`.
+- **Zero-Repainting In-Progress Fallback**:
+  - When the current 7H profile is `IN_PROGRESS`, trading engines automatically inherit the directional bias from the last `COMPLETED` profile.
+- **36-Hour Session Range Persistence**:
+  - Data ingestion loads 36 hours of historical candles (5m = 432 candles, 15m = 144 candles).
+  - Guarantees Asian session High/Low levels persist throughout London and New York without missing data errors.
+
+### 5. Non-Repainting UT Bot Engine
 - **Mathematical Non-Repainting Guarantee**: Evaluates strictly closed bars (`is_complete=True`). No tick-level signal flickering.
 - **Dynamic ATR Trailing Stop**: Trailing key sensitivity value configured per asset class (Forex vs. Synthetic Volatility indices).
 - **200 EMA Macro Filter**:
@@ -114,7 +155,7 @@ An institutional-grade, full-stack **Forex & Synthetic Indices AI Market Analysi
   - `SELL` signals require candle close strictly below 200 EMA.
 - **14 RSI Momentum Filter**: Guards against exhausted market conditions (`RSI < 70` for longs, `RSI > 30` for shorts).
 
-### 3. Structured Actionable Trade Tickets & 3-Tier Scaling
+### 6. Structured Actionable Trade Tickets & 3-Tier Scaling
 Every validated setup outputs a mathematical, unambiguous execution plan:
 - **Order Type**: Explicit `BUY LIMIT` or `SELL LIMIT`.
 - **Execution Geometry**:
@@ -127,7 +168,7 @@ Every validated setup outputs a mathematical, unambiguous execution plan:
   - **TP3**: `5.0R` (Leaves 20% runner for macro trend expansion).
 - **1-Click "COPY ALL"**: Copies clean broker-ready text to clipboard:
   ```text
-  XAUUSD | BUY LIMIT
+  XAUUSD | BUY LIMIT (Grade A+ • SMT Confirmed)
   Entry: 2650.50
   SL: 2642.10
   TP1: 2663.10 (+1.5R -> Move SL to BE)
@@ -135,7 +176,7 @@ Every validated setup outputs a mathematical, unambiguous execution plan:
   TP3: 2692.50 (+5.0R)
   ```
 
-### 4. Trade Lifecycle Tracker & Milestones
+### 7. Trade Lifecycle Tracker & Milestones
 Tracks open setups from generation through completion:
 1. `ENTRY_FILLED`: Order active at limit level.
 2. `TP1_HIT_MOVE_TO_BE`: First target reached; push alert commands trader to secure 50% and move Stop Loss to Breakeven.
@@ -144,16 +185,33 @@ Tracks open setups from generation through completion:
 5. `SL_HIT`: Invalidation reached; risk capped.
 6. `SETUP_CANCELLED`: Front-run detector alerts if price hits TP1 before filling Entry.
 
-### 5. Macro News Intelligence & DXY Engine
-- Real-time economic calendar tracking (US, UK, EUR, JPY high-impact releases).
-- **Dollar Index (DXY) Correlation Matrix**: Evaluates inverse decoupling between USD, Gold (XAUUSD), and major pairs.
-- Automated 60-minute countdown warnings before major central bank rate decisions, CPI, and NFP releases.
+### 8. Macro News Intelligence & DXY Decoupling
+- **Strict Decoupling from Trade Setups**:
+  - DXY is **never** used to gate, block, or generate trade setups. Trade setups are driven exclusively by session structure and 7H profiles.
+  - DXY relationship evaluates to `NEUTRAL` in bias validation.
+- **Reserved Exclusively for Macro News & Events**:
+  - High-impact macroeconomic calendar tracking (CPI, NFP, FOMC rate decisions).
+  - Pre-event 60-minute risk warnings and volatility spike buffer alerts.
+- **Zero Fabricated / Mock Fallback Data**:
+  - Direct DXY symbols (`DXY`, `USDX`, `DX`) or live constituent basket rates are queried. If live data is absent from price feeds, the service reports `UNAVAILABLE` rather than generating artificial prices.
 
-### 6. High-Priority Push Alerts (FCM)
-- Background scanner executes automated cycles across watchlist pairs every 45 seconds.
-- 15-minute deduplication cooldown prevents spamming identical setups.
-- Custom notification sound and emerald LED/branding icon on Android (`forex_ai_high_importance` channel).
-- Tapping an alert deep-links directly to the asset's active trade ticket in the app.
+### 9. Session Scanner Diagnostics & High-Priority Push Alerts (FCM)
+- **Granular Cycle Logging**:
+  - Logs one diagnostic line per symbol/timeframe during every scan cycle:
+    ```text
+    [SessionScanner] [EURUSD 15m] session=london, 7H=COMPLETED BULLISH, levels=[asian: 1.0820-1.0880], first_failed=Sweep in active session
+    ```
+- **Real-Time State Counts & Status Endpoint**:
+  - Cycles conclude with aggregated state counts:
+    ```text
+    🔄 [SessionScanner] Cycle completed for [LONDON]. State Counts: NO_SETUP=4, WATCH=2, POTENTIAL=1, VALID=1
+    ```
+  - Exposed via `GET /api/v1/analysis/scanner/status` with `state_counts` object (`NO_SETUP`, `WATCH`, `POTENTIAL`, `VALID`).
+- **High-Priority FCM Push Dispatch**:
+  - Automated 45-second scan worker with 15-minute deduplication cooldown.
+  - Custom vector candlestick drawable icon (`ic_stat_notification.xml`) and emerald LED/branding tint (`#10B981`).
+  - Deep-links directly to the asset's active trade ticket in the Flutter app.
+
 
 ---
 
@@ -192,11 +250,15 @@ forex-ai-platform/
 │   │   │   ├── candle.py          # CandleDTO, CandleRead
 │   │   │   └── notification.py    # DeviceRegistrationRequest, NotificationRead
 │   │   └── services/              # Business logic & trading engines
-│   │       ├── ai/                # DeterministicProvider, AIAnalysisEngine, UTBotEngine
+│   │       ├── ai/                # DeterministicProvider, AIAnalysisEngine, SessionScannerWorker
+│   │       ├── bias/              # BiasValidationEngine (Multi-layer confirmation & conflict gating)
+│   │       ├── features/          # MSNREngine (CE 50% retest), SMTEngine (Divergence), TargetRealism
+│   │       ├── profiling/         # SevenHourProfileEngine (7H aggregation & zero-repainting)
 │   │       ├── market_data/       # Deriv WebSocket Client & symbol catalog
-│   │       ├── news/              # LiveNewsService, DXYService, NewsIntelligenceEngine
-│   │       ├── notifications/     # NotificationService (Firebase Admin SDK), Scanner
-│   │       └── session/           # SessionEngine (Asian, London, NY Killzones)
+│   │       ├── news/              # EconomicCalendarService, DXYService, NewsIntelligenceEngine
+│   │       ├── notifications/     # NotificationService (Firebase Admin SDK)
+│   │       └── session/           # SessionEngine (Asian, London, NY Killzones & 36H persistence)
+
 │   ├── tests/                     # Comprehensive pytest test suite
 │   ├── Dockerfile                 # Backend-scoped Dockerfile (for Render)
 │   ├── railway.json               # Backend-scoped Railway config
@@ -935,13 +997,18 @@ Render reads [`render.yaml`](file:///c:/Users/lenovo/.gemini/antigravity-ide/scr
 | `GET` | `/api/v1/instruments` | Get all active Forex and synthetic pairs |
 | `GET` | `/api/v1/candles/query?symbol=XAUUSD&timeframe=15m` | Fetch stored OHLCV candles |
 | `GET` | `/api/v1/sessions/current` | Get active Killzones (Asian, London, NY) |
-| `POST` | `/api/v1/analysis/run` | Trigger on-demand SMC + UT Bot AI analysis |
+| `GET` | `/api/v1/sessions/evaluate` | Evaluate sessions & DST transitions for a specific UTC timestamp |
+| `POST` | `/api/v1/analysis/run` | Trigger on-demand MSNR + SMC + UT Bot AI analysis |
 | `GET` | `/api/v1/analysis/latest/{symbol}` | Retrieve latest actionable trade ticket |
+| `GET` | `/api/v1/analysis/scanner/status` | Get real-time scanner health & state counts (`NO_SETUP/WATCH/POTENTIAL/VALID`) |
+| `POST` | `/api/v1/analysis/scanner/run-once` | Manually trigger an immediate scan cycle across watchlist |
 | `POST` | `/api/v1/analysis/lifecycle-event` | Report trade lifecycle state change |
 | `POST` | `/api/v1/notifications/devices` | Register mobile FCM token |
 | `POST` | `/api/v1/notifications/test` | Trigger a test push notification |
+| `GET` | `/api/v1/news/dxy` | Real-time DXY metrics (macro events only; no mock data) |
 | `GET` | `/api/v1/news/events` | Fetch macroeconomic calendar events |
 | `POST` | `/api/v1/news/intelligence` | Generate macro DXY correlation analysis |
+
 
 ### Testing Lifecycle Workflow
 
@@ -973,6 +1040,26 @@ curl -X POST "http://localhost:8000/api/v1/analysis/lifecycle-event" \
        "timestamp_utc": "2026-10-08T12:30:00Z"
      }'
 ```
+
+### Running Automated Test Suite
+
+The platform includes a test suite covering the entire institutional stack:
+
+```bash
+cd backend
+python -m pytest tests/
+```
+
+- **Suite Coverage**: **160 tests passing** across 24 test modules.
+- **Key Modules**:
+  - `tests/test_setup_mathematics.py`: Strict geometry verification (TP < Entry < SL on shorts, SL < Entry < TP on longs, $R:R \ge 2.0$), SessionProfileModel condition checks, liquidity proximity POTENTIAL_SETUP, and scanner status counts.
+  - `tests/test_seven_hour_profile_engine.py`: 7H profile boundaries, 85% completeness threshold (6/7 candles), 3h daily anchor stub, consecutive profile relationships (`SUPPORT`/`CONTRADICT`/`NEUTRAL`), and zero-repainting guarantees.
+  - `tests/test_session_engine.py`: 36-hour lookback Asian & London session persistence across DST shifts and NY overlap.
+  - `tests/test_msnr_engine.py`: Consequent encroachment (50% CE) midpoint entries, RBS/SBR flips, and manipulation exhaustion bars.
+  - `tests/test_smt_engine.py`: Precious metals (XAU/XAG) & Majors (EUR/GBP) divergence, Grade A+ elevation, and contradictory conflict vetoes.
+  - `tests/test_bias_validation_engine.py`: DXY decoupling (returns NEUTRAL for setups, zero mock data).
+  - `tests/test_notifications.py`: FCM high-priority dispatch, deduplication cooldown, and trade lifecycle milestone alerts.
+
 
 ---
 

@@ -63,24 +63,35 @@ class DXYService:
         Formula: 50.14348112 * (EURUSD^-0.576) * (USDJPY^0.136) * (GBPUSD^-0.119) * (USDCAD^0.091) * (USDCHF^0.036)
         Returns None if constituent real data is unavailable when allow_synthetic_fallback is False.
         """
-        # 1. Fetch constituent major prices
+        # 1. Check direct DXY / USDX / DX instrument price first
+        direct_dxy = await self.get_latest_price("DXY", as_of_timestamp)
+        if direct_dxy is None:
+            direct_dxy = await self.get_latest_price("USDX", as_of_timestamp)
+        if direct_dxy is None:
+            direct_dxy = await self.get_latest_price("DX", as_of_timestamp)
+
+        # 2. Fetch constituent major prices if direct feed not available
         eur = await self.get_latest_price("EURUSD", as_of_timestamp)
         gbp = await self.get_latest_price("GBPUSD", as_of_timestamp)
         jpy = await self.get_latest_price("USDJPY", as_of_timestamp)
         cad = await self.get_latest_price("USDCAD", as_of_timestamp)
         chf = await self.get_latest_price("USDCHF", as_of_timestamp)
 
-        # In strict trading mode, never fabricate values
-        if not allow_synthetic_fallback:
-            if any(p is None or p <= 0 for p in [eur, gbp, jpy, cad, chf]):
-                logger.info("One or more DXY basket constituents missing from database. Returning None (UNAVAILABLE).")
-                return None
+        if direct_dxy is not None and direct_dxy > 0:
+            dxy_val = round(float(direct_dxy), 3)
         else:
-            eur = eur or 1.0850
-            gbp = gbp or 1.2950
-            jpy = jpy or 154.20
-            cad = cad or 1.3850
-            chf = chf or 0.8820
+            # If any constituent is missing, never use mock or hardcoded fabricated data unless explicitly enabled for synthetic tests
+            if any(p is None or p <= 0 for p in [eur, gbp, jpy, cad, chf]):
+                if allow_synthetic_fallback:
+                    eur = eur or 1.0850
+                    gbp = gbp or 1.2950
+                    jpy = jpy or 154.20
+                    cad = cad or 1.3850
+                    chf = chf or 0.8850
+                else:
+                    logger.info("Direct DXY or constituent basket missing from database. Returning None (UNAVAILABLE).")
+                    return None
+
 
         # 2. Calculate DXY via standard geometric weighted basket
         try:

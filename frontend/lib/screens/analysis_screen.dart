@@ -26,6 +26,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   AIAnalysisRecord? _analysis;
   MarketContextData? _contextData;
   Map<String, dynamic>? _utBotData;
+  Map<String, dynamic>? _msnrData;
   bool _enableUtBot = false;
   bool _isLoading = false;
   String? _errorMessage;
@@ -84,11 +85,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               .catchError((_) => <String, dynamic>{})
           : Future.value(<String, dynamic>{});
 
-      final results = await Future.wait([analysisFuture, contextFuture, utBotFuture]);
+      final msnrFuture = ApiService.getMsnrAnalysis(
+        _selectedSymbol,
+        timeframe: _selectedTimeframe,
+      ).catchError((_) => <String, dynamic>{});
+
+      final results = await Future.wait([analysisFuture, contextFuture, utBotFuture, msnrFuture]);
       setState(() {
         _analysis = results[0] as AIAnalysisRecord;
         final utMap = results[2];
         _utBotData = (utMap is Map && utMap.isNotEmpty) ? (utMap as Map<String, dynamic>) : null;
+        final msnrMap = results[3];
+        _msnrData = (msnrMap is Map && msnrMap.isNotEmpty) ? (msnrMap as Map<String, dynamic>) : null;
         _isLoading = false;
       });
     } catch (e) {
@@ -149,13 +157,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               const SizedBox(height: 18),
 
               // 2. Analysis
-              _buildSectionLabel('Analysis'),
+              _buildSectionLabel('MSNR Analysis & Storyline'),
               const SizedBox(height: 6),
               _buildAnalysisTextCard(),
               const SizedBox(height: 18),
 
               // 3. Conditions
-              _buildSectionLabel('Conditions'),
+              _buildSectionLabel('MSNR Execution Conditions'),
               const SizedBox(height: 6),
               _buildConditionsCard(),
               const SizedBox(height: 18),
@@ -373,6 +381,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         ? _analysis!.fullReasoning!
         : (_analysis?.summary.isNotEmpty == true ? _analysis!.summary : 'No analysis reasoning returned for this candle.');
 
+    final bestSignal = _msnrData?['highest_quality_signal'] as Map<String, dynamic>?;
+    final activeZones = (_msnrData?['active_zones'] as List<dynamic>?) ?? [];
+    final smt = bestSignal?['smt_confluence'] as Map<String, dynamic>?;
+    final phase = bestSignal?['session_phase'] as String? ?? '';
+    final signalDirection = bestSignal?['direction'] as String? ?? '';
+    final setupType = bestSignal?['setup_type'] as String? ?? '';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -381,16 +396,185 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppTheme.border),
       ),
-      child: Text(
-        reasoning,
-        style: const TextStyle(fontSize: 13, height: 1.5, color: AppTheme.textPrimary),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // MSNR Alchemist Playbook Header
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.architecture_rounded, size: 12, color: Color(0xFFF59E0B)),
+                    SizedBox(width: 4),
+                    Text(
+                      'MSNR / ALCHEMIST PLAYBOOK',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFF59E0B),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (signalDirection.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: (signalDirection == 'BULLISH' ? AppTheme.upGreen : AppTheme.downRed).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: signalDirection == 'BULLISH' ? AppTheme.upGreen : AppTheme.downRed),
+                  ),
+                  child: Text(
+                    signalDirection,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      color: signalDirection == 'BULLISH' ? AppTheme.upGreen : AppTheme.downRed,
+                    ),
+                  ),
+                ),
+              if (phase.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceSubtle,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: Text(
+                    phase.replaceAll('_', ' '),
+                    style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                  ),
+                ),
+            ],
+          ),
+
+          // Active MSNR Key Zones Row
+          if (activeZones.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: activeZones.take(5).map((z) {
+                  final zMap = z as Map<String, dynamic>;
+                  final type = zMap['zone_type']?.toString().replaceAll('_', ' ') ?? 'ZONE';
+                  final ce = (zMap['consequent_encroachment_50'] as num?)?.toDouble() ?? 0.0;
+                  final lvl = (zMap['level_price'] as num?)?.toDouble() ?? 0.0;
+                  final quality = zMap['quality']?.toString() ?? 'FRESH';
+                  final isBullish = type.contains('V') || type.contains('RBS');
+                  final tagColor = isBullish ? AppTheme.upGreen : AppTheme.downRed;
+
+                  return Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: tagColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: tagColor.withValues(alpha: 0.25)),
+                    ),
+                    child: Text(
+                      '$type: ${ce > 0 ? ce.toStringAsFixed(2) : lvl.toStringAsFixed(2)} ($quality)',
+                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: tagColor),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+
+          // Intermarket SMT Divergence banner if detected
+          if (smt != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF38BDF8).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.compare_arrows_rounded, size: 14, color: Color(0xFF38BDF8)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'SMT Divergence: ${smt['divergence_type'] ?? 'Active'} with ${smt['correlated_symbol'] ?? 'Correlated Asset'}',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF38BDF8)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Daily Profile #2 Setup Signal Banner if detected
+          if (setupType.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Model: ${setupType.replaceAll('_', ' ')}',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.textMuted),
+            ),
+          ],
+
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: AppTheme.borderSubtle),
+          const SizedBox(height: 10),
+
+          // Institutional Multi-Step Reasoning
+          Text(
+            reasoning,
+            style: const TextStyle(fontSize: 13, height: 1.5, color: AppTheme.textPrimary),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildConditionsCard() {
-    final conditions = _analysis?.conditionBreakdown ?? [];
-    if (conditions.isEmpty) {
+    final baseConditions = _analysis?.conditionBreakdown ?? <ConditionStatusItem>[];
+    final List<ConditionStatusItem> displayConditions = List.from(baseConditions);
+
+    final bestSignal = _msnrData?['highest_quality_signal'] as Map<String, dynamic>?;
+    final activeZones = (_msnrData?['active_zones'] as List<dynamic>?) ?? [];
+    final smt = bestSignal?['smt_confluence'] as Map<String, dynamic>?;
+
+    // Dynamically augment with live MSNR engine validations from backend
+    final hasZoneCond = displayConditions.any((c) => c.condition.toLowerCase().contains('zone') || c.condition.toLowerCase().contains('ce'));
+    if (!hasZoneCond && activeZones.isNotEmpty) {
+      final firstZ = activeZones.first as Map<String, dynamic>;
+      final zType = firstZ['zone_type']?.toString().replaceAll('_', ' ') ?? 'Key Level';
+      final cePrice = (firstZ['consequent_encroachment_50'] as num?)?.toDouble() ?? (firstZ['level_price'] as num?)?.toDouble() ?? 0.0;
+      final quality = firstZ['quality']?.toString() ?? 'FRESH';
+      displayConditions.add(ConditionStatusItem(
+        condition: 'MSNR Reaction Zone Identified ($zType)',
+        satisfied: true,
+        evidence: 'Mapped $zType at ${cePrice.toStringAsFixed(2)} (50% CE level, $quality, ${firstZ['touches_count'] ?? 0} touches).',
+      ));
+    }
+
+    final hasSmtCond = displayConditions.any((c) => c.condition.toLowerCase().contains('smt'));
+    if (!hasSmtCond && smt != null) {
+      displayConditions.add(ConditionStatusItem(
+        condition: 'Intermarket SMT Divergence Confirmation',
+        satisfied: true,
+        evidence: '${smt['divergence_type'] ?? 'Divergence'} verified with ${smt['correlated_symbol'] ?? 'correlated asset'}.',
+      ));
+    }
+
+    if (displayConditions.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -398,7 +582,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: AppTheme.border),
         ),
-        child: const Text('No explicit conditional rules triggered.', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+        child: const Text('No MSNR conditional rules triggered for this bar.', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
       );
     }
 
@@ -410,7 +594,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         border: Border.all(color: AppTheme.border),
       ),
       child: Column(
-        children: conditions.map((cond) {
+        children: displayConditions.map((cond) {
           final isSat = cond.satisfied;
           final isInvalidated = _analysis?.state.toUpperCase() == 'INVALIDATED' && !isSat;
 
@@ -1218,7 +1402,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         _buildGeometryBox(
                           label: 'ENTRY LIMIT',
                           value: entry > 0 ? entry.toStringAsFixed(2) : '--',
-                          subtext: 'FVG Midpoint Retest',
+                          subtext: '50% CE Equilibrium Retest',
                           color: AppTheme.textPrimary,
                           width: constraints.maxWidth > 340 ? itemWidth : double.infinity,
                           onCopy: entry > 0 ? () => copyToClipboard(entry.toStringAsFixed(2), 'Entry') : null,

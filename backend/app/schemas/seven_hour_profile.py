@@ -52,7 +52,7 @@ class SevenHourProfileConfig(BaseModel):
     alignment_mode: str = "DAILY_ANCHOR" # "DAILY_ANCHOR" (resets at anchor_start) or "CONTINUOUS"
     config_id: str = "UTC_0000_7H"
     pip_size: float = 0.0001
-    min_candles_ratio_for_complete: float = 1.0 # 100% of expected candles required for COMPLETE
+    min_candles_ratio_for_complete: float = 0.85 # 85% of expected candles required for COMPLETE
 
     model_config = ConfigDict(from_attributes=True)
 

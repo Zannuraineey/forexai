@@ -65,7 +65,11 @@ class MarketAlertItem {
   factory MarketAlertItem.fromNotification(Map<String, dynamic> json) {
     DateTime time = DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now();
     final payload = (json['payload'] as Map<String, dynamic>?) ?? {};
-    final sym = (payload['symbol'] ?? json['title'] ?? 'MARKET').toString().toUpperCase();
+    final rawSym = (payload['symbol'] ?? json['symbol'] ?? '').toString().trim().toUpperCase();
+    final titleStr = (json['title'] ?? '').toString().trim().toUpperCase();
+    final sym = rawSym.isNotEmpty
+        ? rawSym
+        : (titleStr.isNotEmpty && titleStr.length <= 10 ? titleStr : 'MARKET');
     final sess = (payload['session'] ?? 'Session').toString();
     final state = (payload['state'] ?? 'ALERT').toString().toUpperCase().replaceAll('_', ' ');
 
@@ -299,31 +303,38 @@ class _AlertsScreenState extends State<AlertsScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            item.symbol,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.textPrimary,
+                      Expanded(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                item.symbol,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            timeStr,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textMuted,
-                              fontFamily: 'monospace',
+                            const SizedBox(width: 8),
+                            Text(
+                              timeStr,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textMuted,
+                                fontFamily: 'monospace',
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Flexible(
+                        flex: 0,
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(

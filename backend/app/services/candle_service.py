@@ -161,14 +161,30 @@ class CandleService:
         result = await self.db.execute(stmt)
         candles = list(result.scalars().all())
 
-        # If database has insufficient candle history, auto-fetch on-demand from provider
-        if auto_fetch and len(candles) < 15 and not start_utc:
+        now = datetime.now(timezone.utc)
+        is_stale = False
+        if candles and not end_utc:
+            latest_ts = candles[0].timestamp_utc
+            if latest_ts.tzinfo is None:
+                latest_ts = latest_ts.replace(tzinfo=timezone.utc)
+
+            gran_map = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
+            gran_sec = gran_map.get(timeframe, 900)
+
+            is_synth = any(k in symbol.upper() for k in ["BOOM", "CRASH", "R_", "1HZ", "RB", "WLD", "JD", "STP", "DEX"])
+            is_weekend = now.weekday() >= 5 or (now.weekday() == 6 and now.hour < 21)
+            market_open = is_synth or not is_weekend
+
+            if market_open and (now - latest_ts).total_seconds() > max(gran_sec * 2.0, 300):
+                is_stale = True
+
+        # If database has insufficient candle history or data is stale, auto-fetch on-demand from provider
+        if auto_fetch and (len(candles) < 15 or is_stale) and not start_utc:
             try:
                 from app.services.market_data import get_market_data_provider
                 provider = get_market_data_provider("deriv")
-                now = datetime.now(timezone.utc)
                 start = now - timedelta(days=7)
-                fetch_count = max(limit, 100)
+                fetch_count = max(limit, 500)
                 fetched = await provider.fetch_historical_candles(
                     symbol=symbol,
                     timeframe=timeframe,
@@ -190,6 +206,7 @@ class CandleService:
                     candles = list(res_retry.scalars().all())
             except Exception as e:
                 logger.warning(f"On-demand candle fetch failed for {symbol} ({timeframe}): {e}")
+
 
         candles.reverse() # Return chronological ascending
         return [CandleRead.model_validate(c) for c in candles]

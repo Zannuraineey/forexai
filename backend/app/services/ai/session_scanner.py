@@ -35,6 +35,12 @@ class SessionScannerWorker:
         self._last_results: List[Dict[str, Any]] = []
         self._total_notifications_sent = 0
         self._last_error: Optional[str] = None
+        self._last_state_counts: Dict[str, int] = {
+            "NO_SETUP": 0,
+            "WATCH": 0,
+            "POTENTIAL": 0,
+            "VALID": 0,
+        }
 
     async def start(self) -> None:
         """Starts the autonomous scanner background task."""
@@ -178,6 +184,52 @@ class SessionScannerWorker:
                             )
                             analysis_record = await ai_engine.execute_analysis(req)
 
+                            # Extract 7H status + direction
+                            p_7h = None
+                            if analysis_record.structured_state and analysis_record.structured_state.seven_hour_profile:
+                                p_7h = analysis_record.structured_state.seven_hour_profile
+                            elif analysis_record.market_context and analysis_record.market_context.get("seven_hour_profile"):
+                                p_7h = analysis_record.market_context["seven_hour_profile"]
+
+                            if p_7h:
+                                if isinstance(p_7h, dict):
+                                    h7_stat = str(p_7h.get("status", "UNKNOWN")).upper()
+                                    h7_dir = str(p_7h.get("direction", "UNKNOWN")).upper()
+                                else:
+                                    h7_stat = str(getattr(p_7h.status, "value", p_7h.status)).upper()
+                                    h7_dir = str(getattr(p_7h.direction, "value", p_7h.direction)).upper()
+                            else:
+                                h7_stat, h7_dir = "NONE", "NONE"
+                            h7_str = f"{h7_stat}+{h7_dir}"
+
+                            # Determine which session levels exist
+                            levels_exist = []
+                            if analysis_record.structured_state and analysis_record.structured_state.session and analysis_record.structured_state.session.session_levels:
+                                for s_name, s_lvl in analysis_record.structured_state.session.session_levels.items():
+                                    if getattr(s_lvl, "high", None) is not None:
+                                        levels_exist.append(s_name)
+                            elif analysis_record.market_context and analysis_record.market_context.get("session_state"):
+                                s_lvls = analysis_record.market_context["session_state"].get("session_levels", {})
+                                for s_name, s_lvl in s_lvls.items():
+                                    if isinstance(s_lvl, dict) and s_lvl.get("high") is not None:
+                                        levels_exist.append(s_name)
+                            levels_str = ",".join(levels_exist) if levels_exist else "none"
+
+                            # Determine the first failed condition
+                            first_failed = "none"
+                            for c in analysis_record.condition_breakdown:
+                                if not c.satisfied:
+                                    first_failed = c.condition
+                                    break
+
+                            # Log one line per symbol/timeframe
+                            logger.info(
+                                f"🔍 [{symbol} {tf}] session={effective_session}, "
+                                f"7H={h7_str}, "
+                                f"levels=[{levels_str}], "
+                                f"first_failed={first_failed}"
+                            )
+
                             item_res = {
                                 "symbol": symbol,
                                 "timeframe": tf,
@@ -225,10 +277,30 @@ class SessionScannerWorker:
                 self._last_error = str(exc)
                 logger.error(f"[SessionScanner] Database session error: {exc}", exc_info=True)
 
+        state_counts = {
+            "NO_SETUP": 0,
+            "WATCH": 0,
+            "POTENTIAL": 0,
+            "VALID": 0,
+        }
+        for r in cycle_results:
+            st = r.get("state")
+            if st == AnalysisStateEnum.VALID_SETUP.value:
+                state_counts["VALID"] += 1
+            elif st == AnalysisStateEnum.POTENTIAL_SETUP.value:
+                state_counts["POTENTIAL"] += 1
+            elif st == AnalysisStateEnum.WATCH.value:
+                state_counts["WATCH"] += 1
+            else:
+                state_counts["NO_SETUP"] += 1
+
+        self._last_state_counts = state_counts
         self._last_results = cycle_results[-30:]
         logger.info(
             f"🔄 [SessionScanner] Cycle #{self._total_scans} completed for [{active_session.upper()}]. "
-            f"Evaluated {len(cycle_results)} symbol/TF pairs, found {setups_found} active setup(s)."
+            f"Evaluated {len(cycle_results)} symbol/TF pairs, found {setups_found} active setup(s). "
+            f"State Counts: NO_SETUP={state_counts['NO_SETUP']}, WATCH={state_counts['WATCH']}, "
+            f"POTENTIAL={state_counts['POTENTIAL']}, VALID={state_counts['VALID']}"
         )
 
         return {
@@ -236,6 +308,7 @@ class SessionScannerWorker:
             "session": active_session,
             "scanned_count": len(cycle_results),
             "setups_found": setups_found,
+            "state_counts": state_counts,
             "results": cycle_results,
         }
 
@@ -248,6 +321,7 @@ class SessionScannerWorker:
             "total_notifications_sent": self._total_notifications_sent,
             "last_scan_utc": self._last_scan_utc.isoformat() if self._last_scan_utc else None,
             "last_active_session": self._last_active_session,
+            "state_counts": self._last_state_counts,
             "recent_results": self._last_results[-10:],
             "last_error": self._last_error,
         }

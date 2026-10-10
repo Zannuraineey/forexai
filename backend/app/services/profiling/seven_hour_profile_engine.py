@@ -73,14 +73,19 @@ class SevenHourProfileEngine:
         duration_seconds = config.duration_hours * 3600
 
         if config.alignment_mode == "DAILY_ANCHOR":
-            # Day anchor resets at anchor_start on each local date
+            # Day anchor resets at anchor_start on each local date.
+            # 24 hours divided by 7H blocks creates three 7H blocks (00:00-07:00, 07:00-14:00, 14:00-21:00)
+            # and a 3-hour stub (21:00-24:00 UTC).
+            # The 3-hour stub is treated as a distinct profile whose expected candle count scales with its
+            # duration (3h), achieving COMPLETED status if it has >=85% of its own expected candles.
             anchor_dt = datetime.combine(dt_local.date(), config.anchor_start, tzinfo=tz)
             if dt_local < anchor_dt:
                 anchor_dt -= timedelta(days=1)
+            next_anchor = anchor_dt + timedelta(days=1)
             delta_sec = (dt_local - anchor_dt).total_seconds()
             block_idx = math.floor(delta_sec / duration_seconds)
             start_local = anchor_dt + timedelta(seconds=block_idx * duration_seconds)
-            end_local = start_local + timedelta(seconds=duration_seconds)
+            end_local = min(start_local + timedelta(seconds=duration_seconds), next_anchor)
         else:
             # CONTINUOUS mode: fixed baseline reference aligned with Monday 2024-01-01 at anchor_start
             epoch_ref = datetime(2024, 1, 1, config.anchor_start.hour, config.anchor_start.minute, tzinfo=tz)
@@ -143,7 +148,8 @@ class SevenHourProfileEngine:
         else:
             eval_time = eval_time.astimezone(timezone.utc)
 
-        expected_count = cls.get_expected_candle_count(config.duration_hours, config.source_timeframe)
+        window_hours = max(1.0, (window_end_utc - window_start_utc).total_seconds() / 3600.0)
+        expected_count = cls.get_expected_candle_count(int(round(window_hours)), config.source_timeframe)
         actual_count = len(candles_in_window)
 
         # Determine Profile Status
@@ -152,10 +158,10 @@ class SevenHourProfileEngine:
         else:
             status = ProfileStatus.COMPLETED
 
-        # Determine Data Quality
+        # Determine Data Quality (requiring >=85% of expected candles for COMPLETE)
         if actual_count == 0:
             data_quality = DataQuality.INSUFFICIENT
-        elif actual_count >= int(expected_count * config.min_candles_ratio_for_complete):
+        elif actual_count >= math.ceil(expected_count * config.min_candles_ratio_for_complete):
             data_quality = DataQuality.COMPLETE
         else:
             data_quality = DataQuality.PARTIAL

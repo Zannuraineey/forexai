@@ -310,6 +310,17 @@ class MarketContextAssembler:
                 )
                 if profiles:
                     profile_res = profiles[-1]
+                    last_completed = next(
+                        (p for p in reversed(profiles) if p.status == ProfileStatus.COMPLETED and p.data_quality != DataQuality.INSUFFICIENT),
+                        None
+                    )
+                    if profile_res.status == ProfileStatus.IN_PROGRESS and last_completed:
+                        # Use last completed profile as the directional bias source while maintaining in-progress status
+                        profile_res = profile_res.model_copy(update={
+                            "direction": last_completed.direction,
+                            "classification": last_completed.classification if profile_res.classification == ProfileClassification.INSUFFICIENT_DATA else profile_res.classification,
+                            "relationship": last_completed.relationship or profile_res.relationship,
+                        })
 
         p_context = cls.build_seven_hour_context(profile_res)
 

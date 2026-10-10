@@ -132,3 +132,47 @@ async def test_session_api_endpoints():
         assert eval_data["is_overlap"] is True
         assert "london" in eval_data["active_sessions"]
         assert "new_york" in eval_data["active_sessions"]
+
+
+def test_36h_synthetic_candles_levels_persisting():
+    """Feed 36 hours of synthetic 5m candles into session_engine. At 13:00 UTC, assert asian.high, asian.low, london.high are all non-null."""
+    from datetime import timedelta
+    current_ts = datetime(2026, 10, 5, 13, 0, 0, tzinfo=timezone.utc)
+    # 36 hours of 5m candles: 36 * 12 = 432 candles
+    candles = []
+    start_ts = current_ts - timedelta(hours=36)
+    curr = start_ts
+    cid = 1
+    while curr <= current_ts:
+        # Base price around 1.0850 with small oscillations
+        price = 1.0850 + ((cid % 20) * 0.0005)
+        candles.append(CandleRead(
+            id=cid,
+            instrument_id=1,
+            provider="deriv",
+            symbol="EURUSD",
+            timeframe="5m",
+            timestamp_utc=curr,
+            open=price,
+            high=price + 0.0010,
+            low=price - 0.0010,
+            close=price + 0.0002,
+            volume=50.0,
+            is_complete=True,
+        ))
+        curr += timedelta(minutes=5)
+        cid += 1
+
+    state = SessionEngine.evaluate_sessions(
+        dt_utc=current_ts,
+        candles_today=candles,
+        pip_size=0.0001,
+        current_candle=candles[-1],
+    )
+
+    assert "asian" in state.session_levels
+    assert state.session_levels["asian"].high is not None
+    assert state.session_levels["asian"].low is not None
+    assert "london" in state.session_levels
+    assert state.session_levels["london"].high is not None
+

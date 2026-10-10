@@ -319,6 +319,70 @@ class DeterministicAIProvider(IAIAnalysisProvider):
         trade_proposal: Optional[Dict[str, Any]] = market_context.get("candidate_trade_proposal") or market_context.get("trade_proposal") or None
 
         # -------------------------------------------------------------
+        # SessionProfileModel: Session + 7H Profile Driven Liquidity Model
+        # -------------------------------------------------------------
+        # 1. 7H Profile Bias (last COMPLETED 7H profile direction and relationship)
+        struct_m_state = market_context.get("structured_market_state") or {}
+        p_obj = struct_m_state.get("seven_hour_profile") or market_context.get("seven_hour_profile") or {}
+        if isinstance(p_obj, dict):
+            bias_7h_dir = str(p_obj.get("direction", "NEUTRAL")).upper()
+            bias_7h_status = str(p_obj.get("status", "COMPLETED")).upper()
+            bias_7h_rel = p_obj.get("previous_relationship") or p_obj.get("relationship")
+        else:
+            bias_7h_dir = str(getattr(p_obj, "direction", "NEUTRAL")).upper()
+            bias_7h_status = str(getattr(p_obj, "status", "COMPLETED")).upper()
+            bias_7h_rel = getattr(p_obj, "previous_relationship", None)
+
+        has_7h_bias = bias_7h_dir in ("BULLISH", "BEARISH")
+        conditions.append(ConditionStatus(
+            condition="7H bias",
+            satisfied=has_7h_bias,
+            evidence=f"7H profile bias is {bias_7h_dir} ({bias_7h_status}, relationship: {bias_7h_rel})" if has_7h_bias else "No directional completed 7H bias available."
+        ))
+
+        # 2. Draw on liquidity = previous session's high/low
+        # (Asia range for London, Asia+London for NY)
+        active_sess_name = str(market_context.get("active_session") or market_context.get("session_name") or session_state.get("primary_session") or "").lower()
+        if "london" in active_sess_name or is_london_model:
+            prior_sess_high = asian_levels.get("high")
+            prior_sess_low = asian_levels.get("low")
+            prior_sess_label = "Asia"
+        elif "new_york" in active_sess_name or "ny" in active_sess_name or is_ny_model:
+            c_highs = [h for h in [asian_levels.get("high"), london_levels.get("high")] if h is not None]
+            c_lows = [l for l in [asian_levels.get("low"), london_levels.get("low")] if l is not None]
+            prior_sess_high = max(c_highs) if c_highs else None
+            prior_sess_low = min(c_lows) if c_lows else None
+            prior_sess_label = "Asia + London"
+        else:
+            prior_sess_high = asian_levels.get("high") or london_levels.get("high") or pdh
+            prior_sess_low = asian_levels.get("low") or london_levels.get("low") or pdl
+            prior_sess_label = "Prior session"
+
+        prior_range_available = bool(prior_sess_high is not None and prior_sess_low is not None)
+        conditions.append(ConditionStatus(
+            condition="Prior session range available",
+            satisfied=prior_range_available,
+            evidence=f"{prior_sess_label} range: High={prior_sess_high}, Low={prior_sess_low}" if prior_range_available else f"{prior_sess_label} range unavailable."
+        ))
+
+        # Check proximity / price approaching liquidity against 7H bias
+        is_approaching_liquidity = False
+        approaching_target_name = ""
+        approaching_target_price = 0.0
+        if has_7h_bias and prior_range_available and current_price:
+            prox_threshold = max(25.0 * pip_size, 1.5 * atr_pips_val * pip_size)
+            if bias_7h_dir == "BULLISH" and prior_sess_low:
+                approaching_target_name = f"{prior_sess_label} Low (SSL)"
+                approaching_target_price = float(prior_sess_low)
+                if current_price >= prior_sess_low and (current_price - prior_sess_low) <= prox_threshold:
+                    is_approaching_liquidity = True
+            elif bias_7h_dir == "BEARISH" and prior_sess_high:
+                approaching_target_name = f"{prior_sess_label} High (BSL)"
+                approaching_target_price = float(prior_sess_high)
+                if current_price <= prior_sess_high and (prior_sess_high - current_price) <= prox_threshold:
+                    is_approaching_liquidity = True
+
+        # -------------------------------------------------------------
         # Institutional Rule 1: Liquidity Sweep Evaluation
         # -------------------------------------------------------------
         high_sweeps: List[Any] = []
@@ -326,13 +390,13 @@ class DeterministicAIProvider(IAIAnalysisProvider):
 
         for s in sweeps:
             if isinstance(s, dict):
-                l_type = str(s.get("level_type", "")).upper()
+                l_type = str(s.get("level_type", "") or s.get("sweep_type", "")).upper()
             else:
-                l_type = str(getattr(s, "level_type", "")).upper()
+                l_type = str(getattr(s, "level_type", "") or getattr(s, "sweep_type", "")).upper()
 
-            if "HIGH" in l_type:
+            if "HIGH" in l_type or "BEARISH" in l_type:
                 high_sweeps.append(s)
-            elif "LOW" in l_type:
+            elif "LOW" in l_type or "BULLISH" in l_type:
                 low_sweeps.append(s)
 
         # Select most recent valid sweep deterministically (tie-break preserves later item)
@@ -349,6 +413,26 @@ class DeterministicAIProvider(IAIAnalysisProvider):
                 enumerate(low_sweeps),
                 key=lambda x: (self.get_sweep_timestamp(x[1]), x[0])
             )[1]
+
+        # 3. Sweep in active session (sweep of liquidity AGAINST the 7H bias in killzone)
+        sweep_against_bias = False
+        if bias_7h_dir == "BULLISH":
+            sweep_against_bias = (bullish_sweep is not None) or (asian_levels.get("swept_low") is True and "london" in active_sess_name)
+        elif bias_7h_dir == "BEARISH":
+            sweep_against_bias = (bearish_sweep is not None) or (asian_levels.get("swept_high") is True and "london" in active_sess_name)
+        else:
+            sweep_against_bias = bool(bearish_sweep or bullish_sweep)
+
+        sweep_in_active_session = bool(sweep_against_bias and (kz_info["is_killzone"] or bool(active_sess_name)))
+        conditions.append(ConditionStatus(
+            condition="Sweep in active session",
+            satisfied=sweep_in_active_session,
+            evidence=(
+                f"Killzone sweep of liquidity against {bias_7h_dir} 7H bias confirmed."
+                if sweep_in_active_session else
+                (f"Liquidity swept but outside active killzone." if sweep_against_bias else f"Awaiting killzone sweep against {bias_7h_dir} 7H bias.")
+            )
+        ))
 
         # -------------------------------------------------------------
         # Institutional Rule 2: Displacement & Market Structure Shift (MSS)
@@ -1020,6 +1104,13 @@ class DeterministicAIProvider(IAIAnalysisProvider):
                         f"Liquidity purged. Awaiting lower-timeframe displacement MSS and FVG creation."
                     )
                     confidence_notes = "Stage 1 & Exhaustion confirmed. Monitoring for Stage 2 (Displacement MSS)."
+        elif is_approaching_liquidity:
+            state = AnalysisStateEnum.POTENTIAL_SETUP
+            summary = (
+                f"⏳ POTENTIAL_SETUP: {symbol} approaching {approaching_target_name} ({approaching_target_price:.2f}) "
+                f"aligned with {bias_7h_dir} 7H bias. Monitoring for killzone sweep."
+            )
+            confidence_notes = f"Anticipatory setup: Price within proximity of {approaching_target_name}. Awaiting sweep & MSS."
         elif any("probing" in c.evidence.lower() for c in conditions):
             state = AnalysisStateEnum.POTENTIAL_SETUP
             summary = f"⚠️ POTENTIAL SETUP: {symbol} is probing key session liquidity boundary. Monitoring for manipulation wick."

@@ -55,12 +55,23 @@ class AIAnalysisEngine:
         if not instrument:
             raise ValueError(f"Instrument '{symbol}' not found in database.")
 
-        # 2. Fetch Recent Candles for Market Context
+        # 2. Fetch Recent Candles for Market Context (covering 36 hours for session levels & 7H profile)
+        limit_map = {
+            "1m": 2160,
+            "5m": 432,
+            "15m": 144,
+            "30m": 72,
+            "1h": 48,
+            "4h": 30,
+            "1d": 30,
+        }
+        main_limit = limit_map.get(timeframe, 432)
+
         stmt = (
             select(Candle)
             .where(Candle.instrument_id == instrument.id, Candle.timeframe == timeframe)
             .order_by(desc(Candle.timestamp_utc))
-            .limit(60)
+            .limit(main_limit)
         )
         c_res = await self.db.execute(stmt)
         candles_raw = c_res.scalars().all()
@@ -97,7 +108,7 @@ class AIAnalysisEngine:
         )
 
         # 3b. Multi-Timeframe Context & 7H Profile Assembly (strictly aligned to setup timestamp)
-        async def _fetch_tf_candles(tf: str) -> List[CandleRead]:
+        async def _fetch_tf_candles(tf: str, tf_limit: int) -> List[CandleRead]:
             if tf == timeframe:
                 return candles
             q = (
@@ -108,15 +119,15 @@ class AIAnalysisEngine:
                     Candle.timestamp_utc <= current_candle.timestamp_utc,
                 )
                 .order_by(desc(Candle.timestamp_utc))
-                .limit(60)
+                .limit(tf_limit)
             )
             q_res = await self.db.execute(q)
             q_raw = q_res.scalars().all()
             return [CandleRead.model_validate(c) for c in reversed(q_raw)]
 
-        candles_4h = await _fetch_tf_candles("4h")
-        candles_1h = await _fetch_tf_candles("1h")
-        candles_15m = await _fetch_tf_candles("15m")
+        candles_4h = await _fetch_tf_candles("4h", 30)
+        candles_1h = await _fetch_tf_candles("1h", 48)
+        candles_15m = await _fetch_tf_candles("15m", 144)
 
         candles_by_tf = {
             "4h": candles_4h,
@@ -125,26 +136,19 @@ class AIAnalysisEngine:
             timeframe: candles,
         }
 
-        # 3c. Real, timestamp-aligned DXY and Macro News Intelligence
-        dxy_svc = DXYService(self.db)
-        dxy_metrics = await dxy_svc.calculate_dxy_index(as_of_timestamp=current_candle.timestamp_utc)
-        if dxy_metrics:
-            dxy_data = {
-                "direction": dxy_metrics.trend,
-                "trend": dxy_metrics.trend,
-                "trend_strength": dxy_metrics.confirmation_status,
-                "change": dxy_metrics.change_pct,
-                "change_pct": dxy_metrics.change_pct,
-                "value": dxy_metrics.value,
-                "source": dxy_metrics.source,
-            }
-        else:
-            dxy_data = {
-                "dxy_direction": "UNAVAILABLE",
-                "dxy_trend_strength": None,
-                "dxy_change": None,
-                "dxy_relationship_to_symbol": "UNAVAILABLE",
-            }
+        # 3c. DXY is excluded from setup generation/trading logic (only for macro event/news analysis)
+        dxy_data = {
+            "direction": "UNAVAILABLE",
+            "trend": "UNAVAILABLE",
+            "trend_strength": None,
+            "change": None,
+            "change_pct": None,
+            "value": None,
+            "source": "UNAVAILABLE",
+            "dxy_direction": "UNAVAILABLE",
+            "dxy_relationship_to_symbol": "UNAVAILABLE",
+            "relationship": "UNAVAILABLE",
+        }
 
         cal_svc = EconomicCalendarService()
         news_data = cal_svc.get_news_risk_at(

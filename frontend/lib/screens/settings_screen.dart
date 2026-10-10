@@ -4,6 +4,7 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../models/session_state.dart';
 import '../models/strategy_instruction.dart';
+import '../models/macro_ai_config.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -33,8 +34,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _cooldownMinutes = 15;
 
   // 5. AI Reasoning Provider (SaaS)
-  String _selectedAiProvider = 'QUANT_MACRO';
+  List<SupportedProvider> _supportedProviders = [];
+  MacroAiConfigSafe? _macroAiConfig;
+  bool _isLoadingAiConfig = false;
+  bool _isSavingAiConfig = false;
+  bool _isTestingAiConnection = false;
+  MacroAiTestResult? _lastTestResult;
+
+  bool _macroReasoningEnabled = true;
+  String _selectedProviderId = 'groq';
+  String _selectedModelId = 'llama-3.3-70b-versatile';
   final TextEditingController _apiKeyCtrl = TextEditingController();
+  final TextEditingController _customBaseUrlCtrl = TextEditingController();
+  final TextEditingController _customModelCtrl = TextEditingController();
+  bool _obscureApiKey = true;
+  bool _isCustomModel = false;
 
   // Device push registration state (kept completely silent and secure from end-user)
   bool _isDeviceRegistered = false;
@@ -49,12 +63,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _apiKeyCtrl.dispose();
+    _customBaseUrlCtrl.dispose();
+    _customModelCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadAllSettingsData() async {
     _loadSessionInfo();
     _loadStrategyInfo();
+    _loadMacroAiConfig();
     _silentlySyncDeviceToken();
   }
 
@@ -719,8 +736,189 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // --- 5. AI Reasoning Card ---
+  // --- 5. AI Reasoning Engine Methods & UI ---
+  Future<void> _loadMacroAiConfig() async {
+    setState(() => _isLoadingAiConfig = true);
+    try {
+      final providers = await ApiService.getMacroAiProviders();
+      final config = await ApiService.getMacroAiConfig();
+      if (mounted) {
+        setState(() {
+          _supportedProviders = providers;
+          _macroAiConfig = config;
+          _macroReasoningEnabled = config.isEnabled;
+          _selectedProviderId = config.provider;
+          _selectedModelId = config.model;
+          if (config.apiBaseUrl != null) {
+            _customBaseUrlCtrl.text = config.apiBaseUrl!;
+          }
+
+          final prov = _supportedProviders.firstWhere(
+            (p) => p.id == _selectedProviderId,
+            orElse: () => _supportedProviders.isNotEmpty
+                ? _supportedProviders.first
+                : SupportedProvider(
+                    id: 'groq',
+                    name: 'Groq',
+                    description: '',
+                    defaultModel: 'llama-3.3-70b-versatile',
+                  ),
+          );
+          _isCustomModel = prov.models.isNotEmpty && !prov.models.any((m) => m.id == _selectedModelId);
+          if (_isCustomModel) {
+            _customModelCtrl.text = _selectedModelId;
+          }
+          _isLoadingAiConfig = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingAiConfig = false);
+    }
+  }
+
+  Future<void> _testAiConnection() async {
+    setState(() => _isTestingAiConnection = true);
+    try {
+      final effModel = _isCustomModel && _customModelCtrl.text.trim().isNotEmpty
+          ? _customModelCtrl.text.trim()
+          : _selectedModelId;
+      final result = await ApiService.testMacroAiConnection(
+        provider: _selectedProviderId,
+        model: effModel,
+        apiKey: _apiKeyCtrl.text.trim().isNotEmpty ? _apiKeyCtrl.text.trim() : null,
+        apiBaseUrl: _customBaseUrlCtrl.text.trim().isNotEmpty ? _customBaseUrlCtrl.text.trim() : null,
+      );
+      if (mounted) {
+        setState(() {
+          _lastTestResult = result;
+          _isTestingAiConnection = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.status == 'SUCCESS'
+                  ? 'Connection verified (${result.latencyMs}ms): ${result.message}'
+                  : 'Connection test failed: ${result.message}',
+            ),
+            backgroundColor: result.status == 'SUCCESS' ? AppTheme.upGreen : AppTheme.downRed,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isTestingAiConnection = false;
+          _lastTestResult = MacroAiTestResult(
+            status: 'FAILED',
+            provider: _selectedProviderId,
+            model: _selectedModelId,
+            latencyMs: 0,
+            message: 'Network error: $e',
+          );
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Connection test error: $e'),
+            backgroundColor: AppTheme.downRed,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveAiConfig() async {
+    setState(() => _isSavingAiConfig = true);
+    try {
+      final effModel = _isCustomModel && _customModelCtrl.text.trim().isNotEmpty
+          ? _customModelCtrl.text.trim()
+          : _selectedModelId;
+      final updated = await ApiService.saveMacroAiConfig(
+        provider: _selectedProviderId,
+        model: effModel,
+        isEnabled: _macroReasoningEnabled,
+        apiKey: _apiKeyCtrl.text.trim().isNotEmpty ? _apiKeyCtrl.text.trim() : null,
+        apiBaseUrl: _customBaseUrlCtrl.text.trim().isNotEmpty ? _customBaseUrlCtrl.text.trim() : null,
+      );
+      if (mounted) {
+        setState(() {
+          _macroAiConfig = updated;
+          _isSavingAiConfig = false;
+          _apiKeyCtrl.clear();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI Macro Reasoning configuration saved securely.'),
+            backgroundColor: AppTheme.upGreen,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSavingAiConfig = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save configuration: $e'),
+            backgroundColor: AppTheme.downRed,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeAiCredentials() async {
+    try {
+      await ApiService.removeMacroAiCredentials();
+      if (mounted) {
+        await _loadMacroAiConfig();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Stored API key credentials removed from server.'),
+            backgroundColor: AppTheme.accent,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to remove credentials: $e'),
+            backgroundColor: AppTheme.downRed,
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildAiEngineCard() {
+    if (_isLoadingAiConfig && _macroAiConfig == null) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: const Center(
+          child: CircularProgressIndicator(color: AppTheme.accent),
+        ),
+      );
+    }
+
+    final activeProvider = _supportedProviders.firstWhere(
+      (p) => p.id == _selectedProviderId,
+      orElse: () => SupportedProvider(
+        id: 'groq',
+        name: 'Groq (Ultra-Fast Llama 3.3)',
+        description: 'Ultra-low latency inference.',
+        defaultModel: 'llama-3.3-70b-versatile',
+        supportsCustomBaseUrl: true,
+      ),
+    );
+
+    final statusText = _lastTestResult?.status ?? _macroAiConfig?.lastTestStatus ?? 'NOT_TESTED';
+    final isSuccess = statusText == 'SUCCESS';
+    final isFailed = statusText == 'FAILED';
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -731,68 +929,335 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 4,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Active Intelligence Model', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+              const Text(
+                'AI Macro Reasoning Engine',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+              ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppTheme.accent.withValues(alpha: 0.12),
+                  color: isSuccess
+                      ? AppTheme.upGreen.withOpacity(0.12)
+                      : (isFailed ? AppTheme.downRed.withOpacity(0.12) : AppTheme.accent.withOpacity(0.12)),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: AppTheme.accent.withValues(alpha: 0.4)),
+                  border: Border.all(
+                    color: isSuccess
+                        ? AppTheme.upGreen.withOpacity(0.4)
+                        : (isFailed ? AppTheme.downRed.withOpacity(0.4) : AppTheme.accent.withOpacity(0.4)),
+                  ),
                 ),
-                child: const Text('INSTITUTIONAL', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.accent)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.circle,
+                      size: 7,
+                      color: isSuccess ? AppTheme.upGreen : (isFailed ? AppTheme.downRed : AppTheme.accent),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      statusText.replaceAll('_', ' '),
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: isSuccess ? AppTheme.upGreen : (isFailed ? AppTheme.downRed : AppTheme.accent),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           const Text(
-            'The AI engine continuously synthesizes live economic releases, actual-vs-forecast deviations, and order-block liquidity pools.',
+            'Configure an AI provider for macroeconomic research and market-context analysis.',
             style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, height: 1.3),
           ),
+          const Divider(height: 18, color: AppTheme.borderSubtle),
+
+          // Enable / Disable Toggle
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Enable Macro Reasoning', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                    SizedBox(height: 2),
+                    Text('Synthesize DXY, calendar deviations, and SMC liquidity order flow', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _macroReasoningEnabled,
+                activeThumbColor: AppTheme.accent,
+                onChanged: (val) => setState(() => _macroReasoningEnabled = val),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
+
+          // Provider Dropdown
           DropdownButtonFormField<String>(
             isExpanded: true,
-            value: _selectedAiProvider,
+            value: _supportedProviders.any((p) => p.id == _selectedProviderId) ? _selectedProviderId : (_supportedProviders.isNotEmpty ? _supportedProviders.first.id : 'groq'),
             dropdownColor: AppTheme.surface,
             decoration: InputDecoration(
               isDense: true,
               filled: true,
               fillColor: AppTheme.background,
-              labelText: 'Reasoning Engine',
+              labelText: 'AI Provider',
               labelStyle: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
               contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppTheme.border)),
             ),
-            items: const [
-              DropdownMenuItem(value: 'QUANT_MACRO', child: Text('Quant Engine (Live SMC & Math)', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
-              DropdownMenuItem(value: 'GEMINI_15_FLASH', child: Text('Google Gemini 1.5/2.5 Flash', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
-              DropdownMenuItem(value: 'OPENAI_GPT4O', child: Text('OpenAI GPT-4o / Mini', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
-            ],
+            items: _supportedProviders.isNotEmpty
+                ? _supportedProviders.map((p) {
+                    return DropdownMenuItem<String>(
+                      value: p.id,
+                      child: Text(p.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary)),
+                    );
+                  }).toList()
+                : [
+                    const DropdownMenuItem(value: 'groq', child: Text('Groq (Ultra-Fast Llama 3.3)', style: TextStyle(fontSize: 12))),
+                    const DropdownMenuItem(value: 'xai', child: Text('xAI Grok', style: TextStyle(fontSize: 12))),
+                    const DropdownMenuItem(value: 'gemini', child: Text('Google Gemini', style: TextStyle(fontSize: 12))),
+                    const DropdownMenuItem(value: 'openai', child: Text('OpenAI GPT', style: TextStyle(fontSize: 12))),
+                    const DropdownMenuItem(value: 'deepseek', child: Text('DeepSeek AI', style: TextStyle(fontSize: 12))),
+                  ],
             onChanged: (val) {
-              if (val != null) setState(() => _selectedAiProvider = val);
+              if (val != null && val != _selectedProviderId) {
+                setState(() {
+                  _selectedProviderId = val;
+                  final prov = _supportedProviders.firstWhere((p) => p.id == val, orElse: () => activeProvider);
+                  _selectedModelId = prov.defaultModel;
+                  _isCustomModel = false;
+                  _customBaseUrlCtrl.text = prov.defaultBaseUrl ?? '';
+                });
+              }
             },
           ),
-          if (_selectedAiProvider != 'QUANT_MACRO') ...[
-            const SizedBox(height: 12),
+          const SizedBox(height: 10),
+
+          // Model Selection Dropdown
+          DropdownButtonFormField<String>(
+            isExpanded: true,
+            value: _isCustomModel ? 'CUSTOM_MODEL' : _selectedModelId,
+            dropdownColor: AppTheme.surface,
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: AppTheme.background,
+              labelText: 'Reasoning Model',
+              labelStyle: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppTheme.border)),
+            ),
+            items: [
+              ...activeProvider.models.map((m) {
+                return DropdownMenuItem<String>(
+                  value: m.id,
+                  child: Text('${m.name} (${m.id})', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary)),
+                );
+              }),
+              const DropdownMenuItem<String>(
+                value: 'CUSTOM_MODEL',
+                child: Text('Custom Model ID...', style: TextStyle(fontSize: 12, color: AppTheme.accent)),
+              ),
+            ],
+            onChanged: (val) {
+              if (val != null) {
+                setState(() {
+                  if (val == 'CUSTOM_MODEL') {
+                    _isCustomModel = true;
+                  } else {
+                    _isCustomModel = false;
+                    _selectedModelId = val;
+                  }
+                });
+              }
+            },
+          ),
+
+          if (_isCustomModel) ...[
+            const SizedBox(height: 10),
             TextField(
-              controller: _apiKeyCtrl,
-              obscureText: true,
+              controller: _customModelCtrl,
+              style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                isDense: true,
+                filled: true,
+                fillColor: AppTheme.background,
+                labelText: 'Enter Custom Model ID',
+                labelStyle: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                hintText: 'e.g. llama-3.3-70b-versatile or grok-2',
+                hintStyle: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppTheme.border)),
+              ),
+            ),
+          ],
+
+          if (activeProvider.supportsCustomBaseUrl) ...[
+            const SizedBox(height: 10),
+            TextField(
+              controller: _customBaseUrlCtrl,
               style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 isDense: true,
                 filled: true,
                 fillColor: AppTheme.background,
-                labelText: 'Custom API Key (Optional)',
+                labelText: 'Custom API Base URL (Optional)',
                 labelStyle: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                hintText: 'Leave empty to use server default key',
-                hintStyle: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                hintText: activeProvider.defaultBaseUrl ?? 'https://api.openai.com/v1',
+                hintStyle: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppTheme.border)),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+
+          // API Key Input with Eye Toggle & Secure Masking
+          TextField(
+            controller: _apiKeyCtrl,
+            obscureText: _obscureApiKey,
+            style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: AppTheme.textPrimary),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: AppTheme.background,
+              labelText: _macroAiConfig?.hasApiKey == true ? 'API Key (Configured)' : 'Provider API Key',
+              labelStyle: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+              hintText: _macroAiConfig?.hasApiKey == true
+                  ? (_macroAiConfig?.maskedKey ?? '••••••••••••••••')
+                  : 'Paste your API key here',
+              hintStyle: TextStyle(
+                fontSize: 11,
+                fontFamily: 'monospace',
+                color: _macroAiConfig?.hasApiKey == true ? AppTheme.upGreen : AppTheme.textMuted,
+              ),
+              suffixIcon: IconButton(
+                icon: Icon(_obscureApiKey ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 16, color: AppTheme.textMuted),
+                onPressed: () => setState(() => _obscureApiKey = !_obscureApiKey),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: AppTheme.border)),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Keys are encrypted at rest with Fernet. They are never sent back to the client or logged.',
+            style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
+          ),
+          const SizedBox(height: 12),
+
+          // Diagnostic Test Result Callout if available
+          if (_lastTestResult != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isSuccess ? AppTheme.upGreen.withOpacity(0.08) : AppTheme.downRed.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: isSuccess ? AppTheme.upGreen.withOpacity(0.3) : AppTheme.downRed.withOpacity(0.3)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    isSuccess ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded,
+                    size: 16,
+                    color: isSuccess ? AppTheme.upGreen : AppTheme.downRed,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isSuccess
+                              ? 'Verified (${_lastTestResult!.latencyMs}ms)'
+                              : 'Connection Diagnostic Failed',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isSuccess ? AppTheme.upGreen : AppTheme.downRed,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _lastTestResult!.message,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isSuccess ? AppTheme.textPrimary : AppTheme.downRed,
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // Action Buttons: Test Connection & Save Configuration
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: _isTestingAiConnection
+                      ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent))
+                      : const Icon(Icons.bolt_rounded, size: 15, color: AppTheme.accent),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.accent,
+                    side: const BorderSide(color: AppTheme.border),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                  onPressed: _isTestingAiConnection ? null : _testAiConnection,
+                  label: Text(
+                    _isTestingAiConnection ? 'Testing...' : 'Test Connection',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: _isSavingAiConfig
+                      ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check_rounded, size: 15),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                  onPressed: _isSavingAiConfig ? null : _saveAiConfig,
+                  label: Text(
+                    _isSavingAiConfig ? 'Saving...' : 'Save Config',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // Remove Key Action if a key exists
+          if (_macroAiConfig?.hasApiKey == true) ...[
+            const SizedBox(height: 8),
+            Center(
+              child: TextButton.icon(
+                icon: const Icon(Icons.delete_outline_rounded, size: 13, color: AppTheme.downRed),
+                style: TextButton.styleFrom(foregroundColor: AppTheme.downRed),
+                onPressed: _removeAiCredentials,
+                label: const Text('Remove Stored API Key', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
               ),
             ),
           ],
@@ -801,3 +1266,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
+

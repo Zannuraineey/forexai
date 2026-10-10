@@ -458,3 +458,97 @@ def test_18_changing_session_engine_does_not_affect_7h_boundaries():
         assert w1_end == w2_end
     finally:
         SessionEngine.SESSION_CONFIGS = original_configs
+
+
+# 19. 1 missing 1h candle out of 7 still produces ProfileStatus.COMPLETED and DataQuality.COMPLETE
+def test_19_one_missing_1h_candle_completeness():
+    """Verify that 6 candles out of 7 (85.7% >= 85% threshold) produces COMPLETED and COMPLETE quality."""
+    cfg = SevenHourProfileConfig(source_timeframe="1h", duration_hours=7)
+    start_dt = datetime(2026, 10, 5, 0, 0, tzinfo=timezone.utc)
+    end_dt = start_dt + timedelta(hours=7)
+
+    # 6 candles out of 7 (missing hour 3)
+    candles = [
+        create_candle(start_dt + timedelta(hours=0), 1.1000, 1.1020, 1.0990, 1.1015, id_=1),
+        create_candle(start_dt + timedelta(hours=1), 1.1015, 1.1040, 1.1010, 1.1030, id_=2),
+        create_candle(start_dt + timedelta(hours=2), 1.1030, 1.1055, 1.1025, 1.1045, id_=3),
+        # hour 3 skipped
+        create_candle(start_dt + timedelta(hours=4), 1.1050, 1.1052, 1.0980, 1.1020, id_=5),
+        create_candle(start_dt + timedelta(hours=5), 1.1020, 1.1070, 1.1010, 1.1065, id_=6),
+        create_candle(start_dt + timedelta(hours=6), 1.1065, 1.1068, 1.1040, 1.1060, id_=7),
+    ]
+
+    res = SevenHourProfileEngine.build_synthetic_profile(
+        symbol="EURUSD",
+        window_start_utc=start_dt,
+        window_end_utc=end_dt,
+        candles_in_window=candles,
+        config=cfg,
+        current_time_utc=end_dt,
+    )
+
+    assert res.source_candle_count == 6
+    assert res.expected_candle_count == 7
+    assert res.status == ProfileStatus.COMPLETED
+    assert res.data_quality == DataQuality.COMPLETE
+
+
+# 20. Two consecutive completed profiles produce a relationship
+def test_20_two_consecutive_completed_profiles_produce_relationship():
+    """Verify that two consecutive completed profiles produce relationship metrics (SUPPORT/CONTRADICT/NEUTRAL)."""
+    from app.services.bias.bias_validation_engine import BiasValidationEngine
+    from app.schemas.bias_validation import SevenHourRelationship
+
+    cfg = SevenHourProfileConfig(alignment_mode="DAILY_ANCHOR", source_timeframe="1h")
+    start_dt = datetime(2026, 10, 5, 0, 0, tzinfo=timezone.utc)
+
+    # Window 1 (00:00 - 07:00): Bullish profile
+    candles_w1 = [
+        create_candle(start_dt + timedelta(hours=i), 1.1000 + i*0.001, 1.1015 + i*0.001, 1.0995 + i*0.001, 1.1010 + i*0.001, id_=i+1)
+        for i in range(7)
+    ]
+    # Window 2 (07:00 - 14:00): Bearish reversal profile
+    candles_w2 = [
+        create_candle(start_dt + timedelta(hours=7 + i), 1.1100 - i*0.001, 1.1120, 1.1080 - i*0.001, 1.1090 - i*0.001, id_=8+i)
+        for i in range(7)
+    ]
+
+    all_candles = candles_w1 + candles_w2
+    eval_time = start_dt + timedelta(hours=14)
+
+    profiles = SevenHourProfileEngine.evaluate_candles(
+        symbol="EURUSD",
+        candles=all_candles,
+        config=cfg,
+        current_time_utc=eval_time,
+    )
+
+    assert len(profiles) >= 2
+    p1 = profiles[0]
+    p2 = profiles[1]
+    assert p1.status == ProfileStatus.COMPLETED
+    assert p2.status == ProfileStatus.COMPLETED
+
+    # The second profile must have its relationship to the first populated
+    assert p2.relationship is not None
+    assert p2.relationship.previous_high == p1.high
+    assert p2.relationship.previous_low == p1.low
+
+    # BiasValidationEngine evaluation produces SUPPORT, CONTRADICT, or NEUTRAL
+    sp_ctx = {
+        "direction": p2.direction.value if hasattr(p2.direction, "value") else str(p2.direction),
+        "classification": p2.classification.value if hasattr(p2.classification, "value") else str(p2.classification),
+        "status": p2.status.value if hasattr(p2.status, "value") else str(p2.status),
+    }
+    alignment = BiasValidationEngine.validate_bias(
+        symbol="EURUSD",
+        custom_htf={"tf_4h_trend": "BULLISH", "tf_1h_trend": "BULLISH"},
+        custom_7h=sp_ctx,
+    )
+    assert alignment.seven_hour_bias["role_to_htf"] in [
+        SevenHourRelationship.SUPPORT,
+        SevenHourRelationship.CONTRADICT,
+        SevenHourRelationship.NEUTRAL,
+    ]
+
+

@@ -51,7 +51,20 @@ async def get_dxy_metrics(db: AsyncSession = Depends(get_db)):
     market regime (Risk-On/Risk-Off), and SMC structure from live price feeds.
     """
     dxy_svc = DXYService(db)
-    return await dxy_svc.calculate_dxy_index(allow_synthetic_fallback=True)
+    res = await dxy_svc.calculate_dxy_index(allow_synthetic_fallback=True)
+    if res is None:
+        return DXYMetrics(
+            value=0.0,
+            trend="CONSOLIDATING",
+            market_regime="NEUTRAL",
+            smc_structure="Real-time DXY data unavailable. Live event monitoring active.",
+            rsi_14=50.0,
+            ema_200=0.0,
+            displacement_active=False,
+            dxy_confirmation_status="NEUTRAL",
+        )
+    return res
+
 
 @router.get("/intelligence", response_model=NewsIntelligenceReport)
 async def get_news_intelligence(
